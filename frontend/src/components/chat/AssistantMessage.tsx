@@ -45,7 +45,11 @@ export function AssistantMessage({
 
         <div className="text-sm leading-relaxed text-slate-800">
           {content ? (
-            <Markdown content={content} />
+            <Markdown
+              content={content}
+              citations={citations}
+              onCitationOpen={onOpenSource}
+            />
           ) : (
             !streaming && (
               <p className="italic text-slate-400">No response was produced.</p>
@@ -78,10 +82,11 @@ export function AssistantMessage({
             <button
               type="button"
               onClick={onInspectTrace}
-              className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs transition-colors ${
+              aria-label={streaming ? "View trace" : traceSelected ? "Trace open" : "Inspect trace"}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-0.5 text-xs font-medium underline-offset-4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
                 traceSelected
-                  ? "text-blue-700"
-                  : "text-slate-400 opacity-0 group-hover:opacity-100 hover:text-blue-700"
+                  ? "bg-blue-50 text-blue-700 underline decoration-blue-300"
+                  : "text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-blue-50 hover:text-blue-700 hover:underline hover:decoration-blue-300"
               }`}
             >
               <BranchIcon className="h-3.5 w-3.5" />

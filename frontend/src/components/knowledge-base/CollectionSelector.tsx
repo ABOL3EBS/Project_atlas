@@ -3,8 +3,14 @@ import { useApp } from "../../context/AppContext";
 import { Dropdown, DropdownItem } from "../ui/Dropdown";
 import { ChevronDownIcon, DocumentMultiIcon, PlusIcon } from "../ui/icons";
 
-export function CollectionSelector({ compact = false }: { compact?: boolean }) {
-  const { knowledgeBases, knowledgeBase, setKnowledgeBase } = useApp();
+export function CollectionSelector({
+  compact = false,
+  align = "left",
+}: {
+  compact?: boolean;
+  align?: "left" | "right";
+}) {
+  const { knowledgeBases, knowledgeBase, setKnowledgeBase, refreshKnowledgeBases } = useApp();
   const [newName, setNewName] = useState("");
   const selected = knowledgeBases.find((kb) => kb.id === knowledgeBase);
 
@@ -13,6 +19,7 @@ export function CollectionSelector({ compact = false }: { compact?: boolean }) {
     if (!name) return;
     setKnowledgeBase(name);
     setNewName("");
+    void refreshKnowledgeBases();
   };
 
   const trigger = compact ? (
@@ -39,6 +46,8 @@ export function CollectionSelector({ compact = false }: { compact?: boolean }) {
   return (
     <Dropdown
       label="Select knowledge base"
+      align={align}
+      menuClassName="w-[280px]"
       trigger={
         <div
           className={`flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-200 bg-white transition-colors hover:bg-slate-50 ${
@@ -59,9 +68,9 @@ export function CollectionSelector({ compact = false }: { compact?: boolean }) {
           onSelect={() => setKnowledgeBase(kb.id)}
         >
           <div className="flex items-center justify-between gap-3">
-            <span className="truncate">{kb.id}</span>
-            <span className="shrink-0 text-xs text-slate-400">
-              {kb.document_count} docs
+            <span className="min-w-0 truncate">{kb.id}</span>
+            <span className="shrink-0 whitespace-nowrap text-xs text-slate-400">
+              {kb.document_count} docs · {kb.chunk_count}
             </span>
           </div>
         </DropdownItem>

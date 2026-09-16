@@ -8,7 +8,6 @@ import {
 import { Dropdown, DropdownItem } from "../ui/Dropdown";
 import {
   BranchIcon,
-  BrandMark,
   ChatIcon,
   ChevronDownIcon,
   DocumentMultiIcon,
@@ -37,8 +36,8 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-16 shrink-0 flex-col border-r border-slate-200 bg-white md:w-60">
       <div className="flex h-16 items-center justify-center gap-2 border-b border-slate-200 px-5 md:justify-start">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-          <BrandMark className="h-5 w-5" />
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-blue-600">
+          <img src="/logo.png" alt="Atlas logo" className="h-9 w-9 object-cover" />
         </span>
         <span className="hidden text-lg font-semibold text-slate-900 md:block">Atlas</span>
       </div>

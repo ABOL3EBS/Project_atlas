@@ -1,207 +1,206 @@
 # Atlas — Agentic Knowledge Assistant
 
-Atlas turns your documents into an evidence-backed AI research assistant: document
-ingestion, semantic retrieval, agentic tool selection, reranking, conversational
-memory, citation-backed generation, execution tracing, and automated evaluation —
-fully runnable locally for $0.
+## What Atlas is
 
-> **Status**: **M0–M7 complete** (local RAG vertical slice, agent with tools and
-> conversation memory, measured retrieval experiments, execution trace/observability,
-> answer-level evaluation + grounding threshold calibration, and a full
-> React/TypeScript frontend). M8 not started; only on explicit instruction. See
-> `IMPLEMENTATION_PLAN.md` for the plan and `ATLAS_PROJECT_SPEC.md` for the spec.
+Atlas turns your documents into an evidence-backed AI research assistant. You upload
+PDFs, markdown, or text; Atlas chunks and embeds them into a knowledge base, and an
+agentic backend plans every turn — deciding whether to answer directly or call a
+retrieval tool — then grounds the answer in retrieved evidence, verifies each
+citation against that evidence, and streams the result to a React frontend over SSE.
+Two things make this more than a toy RAG demo: every execution step of a turn is
+recorded as a structured, KB-scoped execution trace (observability as a first-class
+feature, not a log dump), and the unsupported-question rejection gate is tuned from
+measurement — a grounding threshold calibrated on 68 real questions — rather than a
+guessed constant. The whole stack runs locally on Ollama + ChromaDB for $0, and every
+retrieval and answer-quality claim in this README comes from an automated evaluation
+harness writing real numbers to `evaluation/results/`, not from estimation.
 
-## Stack
+Status: **M0–M7 complete**. M8 (Docker Compose deployment) is not started. See
+`ATLAS_PROJECT_SPEC.md` (spec) and `IMPLEMENTATION_PLAN.md` (plan, measured results).
 
-- Backend: Python 3.12 (uv), FastAPI, ChromaDB, Ollama (gemma2 / nomic-embed-text)
-- Frontend: React + TypeScript + Vite + Tailwind (M7) — in `frontend/`
-- Infra: Docker Compose (M8)
+## Screenshot
 
-## Quick start (backend)
+<!-- TODO: add a real screenshot of the Chat screen — a grounded answer with clickable
+citation chips, and the per-turn execution trace panel alongside the retrieved sources. -->
+
+## Features
+
+**Chat** — streaming answers with markdown over SSE; clickable citation chips that
+open a drawer showing the exact retrieved chunk text; conversation history with
+resume via `conversation_id`; knowledge-base selector; show/hide execution trace.
+
+**Knowledge base** — upload (PDF/markdown/txt), per-document status badges, file
+preview, and delete-with-confirm that removes documents and their vectors.
+
+**Execution trace (observability)** — every real step of a turn is recorded
+(`decision`, `tool_call`, `retrieval`, `reranking`, `grounding`, `citation`,
+`generation_started`/`completed`), streamed live on the same SSE channel, then
+persisted to SQLite (`backend/data/traces.db`) and retrievable via
+`GET /api/trace/{conversation_id}` with strict knowledge-base isolation. Traces expose
+telemetry only — latency, scores, counts, KB id. They never contain retrieved
+document text, the user query, tool arguments, model reasoning, system prompts, or
+secrets.
+
+**Unsupported-question rejection** — a grounding gate separates questions the
+knowledge base can answer from ones it cannot. Out-of-domain questions are explicitly
+rejected with NOT_FOUND instead of being answered from nothing. The threshold is
+calibrated on measurement (see Evaluation), currently **0.60**.
+
+**Settings** — live `/api/health` provider status; configuration is read-only by
+design because runtime settings are `.env`-driven.
+
+## Architecture
+
+Turn pipeline: planner (direct answer vs. one of four tools) → retrieval tool →
+vector search → **BM25 reranking** → **grounding check** (calibrated threshold) →
+citation verification → streamed generation. Conversation memory is selective,
+recalling only relevant prior context per turn.
+
+Stack: Python 3.12 (uv) + FastAPI backend; ChromaDB behind a `VectorStore` interface;
+Ollama (`gemma2` + `nomic-embed-text`) behind swappable `LLMProvider` /
+`EmbeddingProvider` interfaces; SQLite for execution traces; React + TypeScript +
+Vite + Tailwind frontend (`frontend/`); Docker Compose planned for M8.
+
+Key API surface: `POST /api/documents/upload`, `GET /api/documents`,
+`GET /api/documents/knowledge-bases`, `GET /api/documents/{id}/chunks`,
+`DELETE /api/documents/{id}`, `POST /api/chat` (SSE), `GET /api/conversations[/{id}]`,
+`GET /api/trace/{conversation_id}`, `GET /api/health`.
+
+Design decisions are measured, not assumed. BM25 reranking is wired into the
+production `SearchKnowledgeBaseTool` because it measured **+0.024 MRR at +2 ms** on
+the evaluation corpus. LLM query rewrite and multi-query expansion are not in
+production because they measured worse or equal quality at 26×–43× latency. The
+grounding threshold is 0.60 because that is where the measured accept/reject curves
+separate, not because it looked reasonable.
+
+## Evaluation
+
+All numbers come from `evaluation/runners/` running against the real evaluation
+dataset (`knowledge/eval/` — 12 documents, 39 chunks) with hand-labelled questions.
+Evaluation artifacts are gitignored; only the datasets are checked in.
+
+### Retrieval (48 questions)
+
+| Pipeline | Recall@5 | MRR | Latency |
+|---|---|---|---|
+| Baseline embedding search | 1.0000 | 0.9653 | 17.3 ms |
+| + BM25 reranking (adopted) | 1.0000 | **0.9896** | 19.3 ms |
+| + LLM query rewrite (rejected) | 0.9583 | 0.8889 | 455.6 ms |
+| Multi-query → dedup → rerank (rejected) | 1.0000 | 0.9896 | 753.5 ms |
+
+BM25 reranking was adopted after the delta was measured: it fixes all three related-topic
+ordering misses at +2 ms. The other two techniques were rejected on the same corpus —
+rewrite degraded 8/48 questions (2 recall failures), multi-query tied reranking at 39×
+latency.
+
+### Grounding gate calibration (20 unsupported + 48 supported questions)
+
+The gate was calibrated by running the same real search scores as an accept/reject
+curve:
+
+| Threshold | 0.45 | 0.50 | 0.55 | **0.60** | 0.65 |
+|---|---|---|---|---|---|
+| True accept (48 supported) | 1.0000 | 1.0000 | 1.0000 | **1.0000** | 0.7500 |
+| False accept (20 unsupported) | 0.9500 | 0.7500 | 0.2500 | **0.0000** | 0.0000 |
+
+The supported floor (≥ 0.604) and unsupported ceiling (≤ 0.587) separate cleanly at
+**0.60**, so the production default moved 0.45 → 0.60. Honest caveat: "0.0000" is
+**0/20 observed** — the best separator found, one grid step from the next threshold on
+a 20-question sample, not a hard guarantee against a future adversarial query. After
+this change the same recordings project gate false-accepts 19/20 → 0/20 with
+supported acceptance unchanged (48/48).
+
+### End-to-end answer evaluation (68 questions: 48 supported + 20 unsupported)
+
+Measures generated answers, not just retrieval:
+
+| Metric | Value |
+|---|---|
+| Unsupported rejection (E2E) | 0.20 (4/20) |
+| Supported answer rate | 0.98 (47/48) |
+| Citation precision | 0.60 |
+| Citation coverage | 0.95 |
+| Faithfulness (LLM judge, n=42) | 0.90 |
+| Full-turn latency mean / median / p90 | 6326 / 6150 / 8340 ms |
+
+Reading the two layers separately matters: the **gate** is well-calibrated at 0.60,
+but **end-to-end rejection is lower** because the planner answers most unsupported
+questions directly, without ever searching — so the gate is never reached for them.
+The threshold change fixes the gate, not the planner; planner routing is the
+documented follow-up, not something folded silently into this milestone.
+
+## Known limitations & next steps
+
+- **Citation precision ~0.60** — roughly 40% of cited documents don't precision-match.
+  Measured and tracked, not silently fixed.
+- **Planner bypasses retrieval on out-of-domain questions** — this is why E2E
+  rejection (0.20) trails the gate's calibrated behavior. Planner routing is the
+  follow-up.
+- The faithfulness judge is the local 2b model (judge quality is itself an open item).
+- "0/20 false-accepts at 0.60" is an observed sample on 20 questions, not a guarantee.
+- Retrieval-side rejected options are documented (rewrite, multi-query) so a larger
+  corpus can re-test them against these baselines.
+
+## Getting started
+
+### 1. Install dependencies
+
+```bash
+# Python 3.12 + uv (package manager)
+brew install uv        # or: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Ollama (models run locally)
+brew install ollama
+brew services start ollama
+ollama pull gemma2:2b
+ollama pull nomic-embed-text
+
+# Node.js (for the frontend)
+brew install node     # verify with `node --version`
+```
+
+### 2. Set up the project once
+
+```bash
+cd backend && uv sync && cp .env.example .env   # backend deps + env file
+cd ../frontend && npm install                    # frontend deps
+```
+
+### 3. Run — one command
+
+From the repo root:
+
+```bash
+scripts/dev.sh start    # backend (:8000) + frontend (:5173), waits for health
+scripts/dev.sh stop     # kill both
+scripts/dev.sh status   # running or stopped
+scripts/dev.sh restart
+```
+
+Open http://localhost:5173. Logs: `tail -f /tmp/atlas_backend.log /tmp/atlas_vite.log`.
+Verify the API with `GET http://localhost:8000/api/health` (providers must report
+available; that means Ollama is up with the models pulled).
+
+Environment (`backend/.env`, from `.env.example`): `LLM_PROVIDER=ollama`,
+`LLM_MODEL=gemma2:2b`, `EMBEDDING_PROVIDER=ollama`,
+`EMBEDDING_MODEL=nomic-embed-text`, `OLLAMA_BASE_URL=http://localhost:11434`,
+`GROUNDING_THRESHOLD=0.60`. Manual runs (instead of `dev.sh`): `uv run uvicorn
+app.main:app --port 8000` in `backend/`, `npm run dev` in `frontend/` (Vite proxies
+`/api` → :8000). The UI source of truth is
+`frontend/src/components/agent-dashboard-spec.md`.
+
+Reproduce the evaluation numbers:
 
 ```bash
 cd backend
-cp .env.example .env   # adjust model names to your installed Ollama models
-ollama serve
-uv sync
-uv run uvicorn app.main:app --port 8000
+uv run python ../evaluation/runners/run_retrieval.py    # M4 retrieval experiments
+uv run python ../evaluation/runners/run_answer_eval.py  # M6 answer evaluation
 ```
 
-Verify: `GET http://localhost:8000/api/health`
+Results are written to `evaluation/results/` — pipeline numbers in Atlas docs always
+come from these runs, never from estimation.
 
-### Frontend (M7)
+## Tests
 
-```bash
-cd frontend
-npm install
-npm run dev        # → http://localhost:5173 (Vite proxies /api → :8000)
-```
-
-UI source of truth: `frontend/src/components/agent-dashboard-spec.md`. Screens:
-**Chat** (streaming SSE answers with markdown, clickable citation chips that open a
-right-side drawer with the real chunk text, empty-state example chips, conversation
-history + new chat, knowledge-base selector, "Show trace" toggle), **Knowledge Base**
-(upload dropzone, status badges, delete-with-confirm, file preview), **Execution
-Trace** panel (per assistant turn: live event timeline built from the streamed SSE
-events, replaced by the precise persisted trace when the turn completes, retrieved
-sources, and total/retrieval/generation latency), and **Settings** (live `/api/health`
-status; configuration is read-only because runtime settings are `.env`-driven in the
-backend). Build/typecheck: `npm run build`, `npm run typecheck`.
-
-### API
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/api/documents/upload` | Upload PDF/markdown/txt (multipart, `knowledge_base_id` form field) |
-| GET | `/api/documents` | List documents for a knowledge base |
-| GET | `/api/documents/knowledge-bases` | List knowledge bases + doc/chunk counts (M7) |
-| GET | `/api/documents/{id}/chunks` | Real chunk text for a document, KB-scoped (M7) |
-| DELETE | `/api/documents/{id}` | Delete a document and its vectors |
-| POST | `/api/chat` | Ask a question; SSE event stream (decision/tool_call/retrieval/token/done/error/trace/…). Pass `conversation_id` to resume a thread |
-| GET | `/api/conversations` | List conversations for a knowledge base |
-| GET | `/api/conversations/{id}` | Conversation detail (KB-scoped) |
-| GET | `/api/trace/{conversation_id}` | Execution traces for a conversation (KB-scoped, `knowledge_base_id` query param) |
-| GET | `/api/health` | Provider availability |
-
-### Retrieval experiments (M4)
-
-Every pipeline is measured against the real evaluation dataset
-(`knowledge/eval/` corpus: 12 documents, 39 chunks, 48 questions with hand-labelled
-`expected_sources`), run locally with `nomic-embed-text` + ChromaDB and `gemma2:2b`
-for the LLM stages. Results are written to `evaluation/results/`; nothing is
-estimated or fabricated.
-
-```
-Retrieval Experiment Results
-Dataset: 48 questions · top_k=5 · chunk_size=250/overlap=25 · candidate pool=25
-
-Pipeline                     Recall@5      MRR    Latency (ms)
--------------------------------------------------------------
-Baseline                       1.0000   0.9653           17.3
-+ Query Rewrite (LLM)          0.9583   0.8889          455.6
-+ Reranking (BM25)             1.0000   0.9896           19.3
-Multi-query → Dedup → Rerank   1.0000   0.9896          753.5
--------------------------------------------------------------
-Latency is per-query wall time including every pipeline stage.
-```
-
-What the measurements say:
-
-- **BM25 reranking is the adopted improvement.** Baseline mis-orders related-topic
-  documents in 3 of 48 questions; reranking fixes all three (it introduces one
-  ordering regression elsewhere) for a net **+0.024 MRR** at +2 ms per query.
-- **LLM query rewrite measurably hurts retrieval here.** It degrades 8 of 48
-  questions and, on two of them, pulls the search into entirely unrelated documents
-  so the expected source drops out of top-5 entirely (Recall@5 1.0 → 0.9583, MRR
-  0.9653 → 0.8889) at +438 ms per query. Not adopted.
-- **Multi-query ties reranking on quality** (same BM25 reranker) but costs 39× the
-  latency of the baseline. Not adopted on this dataset.
-
-So production search stays on plain embedding search with BM25 reranking behind the
-swappable `Reranker` interface (and, since M5, the rerank actually runs in the
-production `SearchKnowledgeBaseTool`). Reproduce with:
-
-```bash
-cd backend
-uv run python ../evaluation/runners/run_retrieval.py
-```
-
-### Execution traces (M5)
-
-Every real execution step of a chat turn is recorded as a trace and persisted to
-`backend/data/traces.db` (SQLite, one store per DB, KB-scoped):
-
-- **Event types**: `trace_started`, `agent_started`, `decision`, `tool_call`,
-  `retrieval`, `reranking`, `grounding`, `citation`, `generation_started`,
-  `generation_completed`, `error`, `trace_completed`.
-- **Retrieval**: recorded counts are real (`candidates` vs. `returned`) and so are
-  the `search`/`rerank` timings; the `reranking` event fires only when a rerank ran
-  (search tool), never for `retrieve_document`.
-- **Grounding**: `passed`/`rejected` with the rule (`threshold` for search/compare
-  tools, `any_evidence` for retrieve_document/tool), the top evidence score, and the
-  threshold that decided it.
-- **Citations**: one event per verified citation (chunk id, document name, page,
-  section).
-- **Security boundary**: traces expose telemetry only — counts, KB id, tool name,
-  method, scores, latency. They never include retrieved document text, the user
-  query, tool arguments, model reasoning, system prompts, or provider secrets.
-  Error events carry a safe message (capped at 500 chars).
-
-Retrieve traces for a conversation (404 if you use the wrong knowledge base):
-
-```bash
-curl "http://localhost:8000/api/trace/<conversation_id>?knowledge_base_id=default"
-```
-
-Traces also stream live on the chat SSE channel (`trace`, `reranking`, `grounding`,
-`citation`, `trace_completed` events) alongside the existing observability events.
-
-### Answer evaluation (M6)
-
-M6 extends measurement from retrieval (M4) to the full generated answer. The answer
-runner (`evaluation/runners/run_answer_eval.py`) drives the real `AtlasAgent` over 68
-labelled questions — the 48 supported questions from M4 plus 20 out-of-domain
-unsupported questions (`evaluation/datasets/answer.json`, expected answer = NOT_FOUND) —
-against the same 12-doc corpus, and measures rejection, citations, judge-based
-faithfulness, and full-turn latency. Results are written to `evaluation/results/`
-(nothing estimated).
-
-Measured E2E at the then-current default threshold 0.45 (`evaluation/results/`):
-
-```
-unsupported rejection rate : 0.2000  (4/20)
-unsupported answered rate  : 0.8000  (16/20 → hallucination risk)
-supported answer rate      : 0.9792  (47/48)
-citation precision         : 0.5952   coverage 0.9524
-faithfulness (judge, n=42) : 0.9048
-latency mean/med/p90       : 6326 / 6150 / 8340 ms
-```
-
-The headline deliverable is the **grounding-threshold calibration** — the same real
-search scores, expressed as an accept/reject curve:
-
-```
-threshold              0.35    0.40    0.45    0.50    0.55    0.60    0.65
-true_accept (48)       1.0000  1.0000  1.0000  1.0000  1.0000  1.0000  0.7500
-false_accept (20)      1.0000  1.0000  0.9500  0.7500  0.2500  0.0000  0.0000
-```
-
-The **gate calibration** (isolated single-search measurement) is well-separated at
-**0.60** — every supported question scores ≥ 0.604, every unsupported one ≤ 0.587 —
-so the default threshold moved **0.45 → 0.60** (only after measurement, per the
-M4/M5 contract). Note the sample: "0.00" at 0.60 means **0/20 observed**, not a hard
-guarantee — the cliff from 0.55 to 0.60 is one grid step wide on 20 questions, and a
-21st adversarial query could land in the 0.587–0.60 gap. Effect on the same real
-recordings: gate false-accepts 19/20 → 0/20, supported acceptance unchanged 48/48,
-projected E2E unsupported rejection 0.20 → 0.55.
-
-Keep the two tables separate: **threshold calibration fixes the gate — it does not fix
-the planner.** End-to-end rejection was 0.20 because the planner answered 16/20
-unsupported questions without ever searching, so the gate was never reached for most of
-them; leaving that leak open is a follow-up milestone item (planner routing), not
-something folded into M6. A separate known gap: citation precision 0.595 (~40% of cited
-documents don't precision-match) is measured and tracked, not silently fixed.
-
-Reproduce:
-
-```bash
-cd backend
-uv run python ../evaluation/runners/run_retrieval.py   # M4
-uv run python ../evaluation/runners/run_answer_eval.py  # M6
-```
-
-### Tests & lint
-
-```bash
-cd backend
-uv run pytest
-uvx ruff check .
-```
-
-Every chat SSE stream emits safe observable events (`conversation`, `decision`,
-`tool_call`, `retrieval`, `reranking`, `grounding`, `citation`, `memory`, `status`,
-`token`, `done`, `answer`, `trace`, `trace_completed`, `error`) — never hidden
-chain-of-thought. Atlas plans each turn (direct answer vs. one of four tools) and
-only recalls selective, relevant conversation context. Traces are persisted for
-every turn, so a call that fails mid-generation still leaves a `trace_completed`
-event with a `failed` status and a safe error message.
+`cd backend && uv run pytest` — **167 tests, all passing**; `uvx ruff check .` clean.
+Frontend: `cd frontend && npm run build && npm run typecheck`.

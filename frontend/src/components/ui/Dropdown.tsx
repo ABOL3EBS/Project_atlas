@@ -5,9 +5,16 @@ interface DropdownProps {
   label: string;
   children: ReactNode;
   align?: "left" | "right";
+  menuClassName?: string;
 }
 
-export function Dropdown({ trigger, label, children, align = "left" }: DropdownProps) {
+export function Dropdown({
+  trigger,
+  label,
+  children,
+  align = "left",
+  menuClassName = "",
+}: DropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -50,9 +57,9 @@ export function Dropdown({ trigger, label, children, align = "left" }: DropdownP
       {open && (
         <div
           role="menu"
-          className={`absolute z-40 mt-1 min-w-[220px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm ${
+          className={`absolute z-40 mt-1 min-w-[220px] max-w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm ${
             align === "right" ? "right-0" : "left-0"
-          }`}
+          } ${menuClassName}`}
         >
           {children}
         </div>

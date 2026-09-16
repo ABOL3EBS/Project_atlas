@@ -16,6 +16,7 @@ interface AppContextValue {
   setKnowledgeBase: (id: string) => void;
   health: Health | null;
   healthError: boolean;
+  refreshingKnowledgeBases: boolean;
   refreshKnowledgeBases: () => Promise<void>;
   refreshHealth: () => Promise<void>;
 }
@@ -31,13 +32,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const [health, setHealth] = useState<Health | null>(null);
   const [healthError, setHealthError] = useState(false);
+  const [refreshingKnowledgeBases, setRefreshingKnowledgeBases] = useState(false);
 
   const refreshKnowledgeBases = useCallback(async () => {
+    setRefreshingKnowledgeBases(true);
     try {
       const bases = await listKnowledgeBases();
       setKnowledgeBases(bases);
     } catch {
       // keep the previous list; the caller can surface the error
+    } finally {
+      setRefreshingKnowledgeBases(false);
     }
   }, []);
 
@@ -74,10 +79,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setKnowledgeBase,
       health,
       healthError,
+      refreshingKnowledgeBases,
       refreshKnowledgeBases,
       refreshHealth,
     }),
-    [knowledgeBases, knowledgeBase, setKnowledgeBase, health, healthError, refreshKnowledgeBases, refreshHealth],
+    [knowledgeBases, knowledgeBase, setKnowledgeBase, health, healthError, refreshingKnowledgeBases, refreshKnowledgeBases, refreshHealth],
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

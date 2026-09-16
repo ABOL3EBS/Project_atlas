@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { useApp } from "../../context/AppContext";
 import { useChat } from "../../context/ChatContext";
 import type { Citation } from "../../lib/types";
 import { CollectionSelector } from "../knowledge-base/CollectionSelector";
 import { Dropdown, DropdownItem } from "../ui/Dropdown";
-import { ChatIcon, PlusIcon } from "../ui/icons";
+import { ChatIcon, PlusIcon, RefreshIcon, SpinnerIcon } from "../ui/icons";
 import { Header } from "../layout/Header";
 import { Composer } from "./Composer";
 import { EmptyState } from "./EmptyState";
@@ -11,6 +12,7 @@ import { MessageList } from "./MessageList";
 import { SourceDrawer } from "./SourceDrawer";
 
 export function ChatScreen() {
+  const { refreshingKnowledgeBases, refreshKnowledgeBases } = useApp();
   const {
     messages,
     conversations,
@@ -45,7 +47,21 @@ export function ChatScreen() {
         subtitle="Ask questions about your knowledge base."
         right={
           <>
-            <CollectionSelector compact />
+            <CollectionSelector compact align="right" />
+            <button
+              type="button"
+              onClick={() => void refreshKnowledgeBases()}
+              aria-label="Refresh collections"
+              title="Refresh collections"
+              disabled={refreshingKnowledgeBases}
+              className="rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {refreshingKnowledgeBases ? (
+                <SpinnerIcon className="h-4 w-4" />
+              ) : (
+                <RefreshIcon className="h-4 w-4" />
+              )}
+            </button>
             <Dropdown
               label="Conversations"
               align="right"
