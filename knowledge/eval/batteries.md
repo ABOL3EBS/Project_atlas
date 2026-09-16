@@ -62,3 +62,14 @@ manganese stabilises the lattice at the cost of some capacity. Cobalt-free chemi
 such as LFP sacrifice energy density for cost, safety, and longevity, which explains
 their dominance in grid-scale systems where footprint matters less than lifecycle
 cost.
+
+## Series and parallel assembly
+
+Cells are grouped into packs through series and parallel connections. Series links add
+voltage, so sixteen 3.6-volt cells in series reach roughly 58 volts, while parallel
+links add capacity at the same voltage. A weak cell in a series string is a liability,
+because the pack current runs through every cell and the weakest cell determines
+discharge compliance. Fuses and balancing leads are placed per parallel group so that a
+single cell fault does not drag the entire string into overvoltage or open-circuit the
+pack. The pack architecture is therefore chosen to keep the worst-case single-cell
+failure survivable rather than merely making the healthy cells easier to assemble.

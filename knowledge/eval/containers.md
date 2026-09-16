@@ -68,3 +68,15 @@ first response to bad behaviour; a container that OOM loops is unhealthy and sho
 flagged, not silently rescheduled forever. Logs and metrics belong outside the
 container lifecycle, captured by the platform, so debugging does not require entering
 a rotting container the instant it dies.
+
+## Orchestration basics
+
+An orchestrator reconciles the declared state of the workload with the observed state
+of the cluster. Deployments describe how many replicas of a service must run, and a
+replica set converges reality toward that number when a node fails or a pod is
+evicted. Rolling updates replace old pods gradually, so a broken image surfaces on a
+fraction of traffic before the remaining replicas are swapped. Service discovery is
+handled by the platform's own DNS, so containers address each other by service name
+and never need hard-coded host addresses. Secrets, configuration, and resource limits
+are all declared as objects the orchestrator reconciles, keeping the human out of the
+critical rebuild path.

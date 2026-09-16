@@ -43,31 +43,39 @@ Verify: `GET http://localhost:8000/api/health`
 ### Retrieval experiments (M4)
 
 Every pipeline is measured against the real evaluation dataset
-(`knowledge/eval/` corpus, 36 questions with hand-labelled `expected_sources`),
-run locally with `nomic-embed-text` + ChromaDB and `gemma2:2b` for the LLM stages.
-Results are written to `evaluation/results/`; nothing is estimated or fabricated.
+(`knowledge/eval/` corpus: 12 documents, 39 chunks, 48 questions with hand-labelled
+`expected_sources`), run locally with `nomic-embed-text` + ChromaDB and `gemma2:2b`
+for the LLM stages. Results are written to `evaluation/results/`; nothing is
+estimated or fabricated.
 
 ```
 Retrieval Experiment Results
-Dataset: 36 questions · top_k=5 · chunk_size=250/overlap=25 · candidate pool=25
+Dataset: 48 questions · top_k=5 · chunk_size=250/overlap=25 · candidate pool=25
 
 Pipeline                     Recall@5      MRR    Latency (ms)
 -------------------------------------------------------------
-Baseline                       1.0000   0.9583           17.7
-+ Query Rewrite (LLM)          1.0000   0.9722          462.3
-+ Reranking (BM25)             1.0000   1.0000           19.0
-Multi-query → Dedup → Rerank   1.0000   1.0000          684.4
+Baseline                       1.0000   0.9653           17.3
++ Query Rewrite (LLM)          0.9583   0.8889          455.6
++ Reranking (BM25)             1.0000   0.9896           19.3
+Multi-query → Dedup → Rerank   1.0000   0.9896          753.5
 -------------------------------------------------------------
 Latency is per-query wall time including every pipeline stage.
 ```
 
-What the measurements say: all variants already retrieve every expected document at
-top-5 (the corpus is small and topically clean). The difference is **ordering** —
-baseline places the wrong related-topic document first in 3 of 36 questions, and
-BM25 reranking fixes all three for ~1 ms of extra cost. The LLM stages (query
-rewrite + multi-query) add 400–670 ms per query and produce no measurable benefit
-on this dataset, so the production search tool stays on plain embedding search,
-with reranking as the one adopted improvement. Reproduce with:
+What the measurements say:
+
+- **BM25 reranking is the adopted improvement.** Baseline mis-orders related-topic
+  documents in 3 of 48 questions; reranking fixes all three (it introduces one
+  ordering regression elsewhere) for a net **+0.024 MRR** at +2 ms per query.
+- **LLM query rewrite measurably hurts retrieval here.** It degrades 8 of 48
+  questions and, on two of them, pulls the search into entirely unrelated documents
+  so the expected source drops out of top-5 entirely (Recall@5 1.0 → 0.9583, MRR
+  0.9653 → 0.8889) at +438 ms per query. Not adopted.
+- **Multi-query ties reranking on quality** (same BM25 reranker) but costs 39× the
+  latency of the baseline. Not adopted on this dataset.
+
+So production search stays on plain embedding search with BM25 reranking behind the
+swappable `Reranker` interface. Reproduce with:
 
 ```bash
 cd backend

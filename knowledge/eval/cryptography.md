@@ -68,3 +68,15 @@ security module or a dedicated keystore with access control, not in a configurat
 file committed to source control. The era of "encrypt it and never rotate" is over;
 modern designs assume a component will be compromised and build periodic rotation into
 the system from day one.
+
+## End-to-end protocol design
+
+Encrypting in transit and at rest is not the same as protecting the data end to end.
+End-to-end encryption derives session keys that the service operator never sees, so a
+compromised server leaks ciphertext but not plaintext. Authenticated key agreement is
+the hard part: both sides must prove who they are before a single ciphertext block is
+exchanged, which is why certificate pinning and passkey-authorised sessions defeat
+man-in-the-middle attacks that plain TLS trusts would walk through. Forward secrecy
+then guarantees that even a stolen long-term key cannot decrypt past traffic. The lay
+audit that matters is whether any component, operator, or backup holds a key that can
+unlock the plaintext, because that component is the new attack surface.

@@ -85,22 +85,23 @@ Users can change models without touching code. The app must detect provider/mode
 **M4 status:** done. Experiment harness under `app/retrieval/pipelines.py` (swappable
 `Reranker` / `QueryTransformer` interfaces, zero new dependencies: BM25 reranker on the
 stdlib), `app/evaluation/metrics.py` + `dataset.py`, CLI runner
-`evaluation/runners/run_retrieval.py`. Evaluation corpus `knowledge/eval/` (9 docs, 27
-chunks) with a 36-question labelled dataset `evaluation/datasets/retrieval.json`.
-Measured against Ollama (`nomic-embed-text`, `gemma2:2b`), top_k=5,
-chunk_size=250/overlap=25, candidate pool=25:
+`evaluation/runners/run_retrieval.py`. Evaluation corpus `knowledge/eval/` (12 docs, 39
+chunks, including related-topic distractor clusters) with a 48-question labelled dataset
+`evaluation/datasets/retrieval.json`. Measured against Ollama (`nomic-embed-text`,
+`gemma2:2b`), top_k=5, chunk_size=250/overlap=25, candidate pool=25:
 
 | Pipeline | Recall@5 | MRR | Latency (ms) |
 |---|---|---|---|
-| Baseline (embed → top-k) | 1.0000 | 0.9583 | 17.7 |
-| + Query rewrite | 1.0000 | 0.9722 | 462.3 |
-| + Reranking | 1.0000 | 1.0000 | 19.0 |
-| Multi-query → dedup → rerank | 1.0000 | 1.0000 | 684.4 |
+| Baseline (embed → top-k) | 1.0000 | 0.9653 | 17.3 |
+| + Query rewrite | 0.9583 | 0.8889 | 455.6 |
+| + Reranking | 1.0000 | 0.9896 | 19.3 |
+| Multi-query → dedup → rerank | 1.0000 | 0.9896 | 753.5 |
 
-Outcome: BM25 reranking is the only adopted improvement — it fixes the 3 ordering
-failures baseline had and costs ~1 ms. LLM rewrite/multi-query add 400–670 ms with no
-measurable benefit on this dataset, so production search stays on embedding search +
-BM25 rerank. Reproduce: `uv run python ../evaluation/runners/run_retrieval.py`.
+Outcome: BM25 reranking is the only adopted improvement — it fixes 3 baseline
+ordering failures for a net +0.024 MRR at +2 ms. LLM query rewrite measurably hurts
+(this dataset: 8 degraded questions, 2 recall failures, +438 ms), and multi-query
+ties reranking quality at 39× latency; neither is wired into production. Reproduce:
+`uv run python ../evaluation/runners/run_retrieval.py`.
 
 ### M5 — Observability / Trace
 - Execution-event model (safe observable events only)

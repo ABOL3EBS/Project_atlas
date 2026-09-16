@@ -11,9 +11,11 @@
 The project is currently implementing **M0 + M1 + M2 + M3 + M4**.
 
 M4 (retrieval experiments) is complete: the user explicitly authorized M4 after M3
-passed. M4 produced real measured results on `knowledge/eval/` + a 36-question dataset
-(see `IMPLEMENTATION_PLAN.md`); only BM25 reranking was adopted — the LLM rewrite and
-multi-query pipelines showed no measurable benefit and were NOT wired into production.
+passed. M4 produced real measured results on `knowledge/eval/` (12 docs, 39 chunks) +
+a 48-question dataset (see `IMPLEMENTATION_PLAN.md`); only BM25 reranking was adopted
+(net +0.024 MRR at +2 ms) — the LLM query rewrite measurably hurt retrieval here
+(0.889 MRR, 2 recall failures) and multi-query tied rerank at 39× latency, so neither
+is wired into production.
 
 Do not implement M5 or later unless explicitly instructed after M4 acceptance
 criteria pass.

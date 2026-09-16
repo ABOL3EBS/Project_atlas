@@ -142,5 +142,53 @@
   {
     "question": "What are the caching limitations of DNS-based global load balancing?",
     "expected_sources": ["load_balancing.md"]
+  },
+  {
+    "question": "What problem does choosing a hash shard key create for range queries and range scans?",
+    "expected_sources": ["distributed_databases.md"]
+  },
+  {
+    "question": "Why does replication lag cause read-your-own-writes problems in a single-leader system?",
+    "expected_sources": ["distributed_databases.md"]
+  },
+  {
+    "question": "What trade-off does multi-leader replication make when two leaders write to the same key concurrently?",
+    "expected_sources": ["distributed_databases.md"]
+  },
+  {
+    "question": "Why does two-phase commit block while a participant has crashed, and what alternative does the spec prefer?",
+    "expected_sources": ["distributed_databases.md"]
+  },
+  {
+    "question": "Why is pumped hydro storage a poor fit for fast frequency regulation compared to batteries?",
+    "expected_sources": ["grid_energy_storage.md"]
+  },
+  {
+    "question": "What advantage do flywheels have over batteries for short-duration ancillary grid services?",
+    "expected_sources": ["grid_energy_storage.md"]
+  },
+  {
+    "question": "How does an adiabatic compressed air design reuse heat to improve round-trip efficiency?",
+    "expected_sources": ["grid_energy_storage.md"]
+  },
+  {
+    "question": "What determines whether a grid's storage portfolio includes pumped hydro rather than more batteries?",
+    "expected_sources": ["grid_energy_storage.md"]
+  },
+  {
+    "question": "How does an origin-shield cache miss differ from an edge cold fill in terms of origin load?",
+    "expected_sources": ["cdn_and_edge_caching.md"]
+  },
+  {
+    "question": "What does a stale-then-revalidate policy achieve for users when an object is only slightly out of date?",
+    "expected_sources": ["cdn_and_edge_caching.md"]
+  },
+  {
+    "question": "Why is an uncacheable header the root cause of a thundering herd problem for a CDN?",
+    "expected_sources": ["cdn_and_edge_caching.md"]
+  },
+  {
+    "question": "What does origin shielding collapse, and how does it help under a sudden flash of popularity?",
+    "expected_sources": ["cdn_and_edge_caching.md"]
   }
 ]

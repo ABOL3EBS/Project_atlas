@@ -65,3 +65,14 @@ partition key directly; wrapping it in a function call defeats the pruning and t
 an elegant scheme into a sequential-scan disaster. Inherited old partitions can be
 detached and dropped cheaply, which is why partitioned time-series tables never need
 a VACUUM FULL.
+
+## Monitoring hot paths
+
+The pg_stat_statements extension records normalized query text with execution counts
+and total time, which turns a sluggish system into a ranked list of the queries that
+cost the most wall-clock aggregate. Ordering by total time surfaces hot queries even
+when each individual run is fast enough to escape notice. Once the hot set is known,
+EXPLAIN the worst offenders and compare the estimated row counts with actual rows, a
+mismatch by an order of magnitude pointing the investigation at stale statistics
+rather than a missing index. Lock waits exposed in pg_locks and the axed statement
+timeouts complete the picture of where throughput actually disappears.

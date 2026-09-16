@@ -32,7 +32,7 @@ def test_corpus_parses_into_chunks_for_every_document():
     for name, chunks in _chunks_per_document.items():
         assert chunks, f"{name} produced no chunks"
     total = sum(len(chunks) for chunks in _chunks_per_document.values())
-    assert total >= 24, "corpus too small for discriminating top-k experiments"
+    assert total >= 36, "corpus too small for discriminating top-k experiments"
 
 
 def test_dataset_rejects_malformed_entries(tmp_path):
