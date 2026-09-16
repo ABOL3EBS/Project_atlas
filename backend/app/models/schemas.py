@@ -15,6 +15,24 @@ class DocumentOut(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4096)
     knowledge_base_id: str = "default"
+    conversation_id: str | None = None
+
+
+class ConversationOut(BaseModel):
+    id: str
+    knowledge_base_id: str
+    created_at: str
+
+
+class MessageOut(BaseModel):
+    id: str
+    role: str
+    content: str
+    created_at: str
+
+
+class ConversationDetailOut(ConversationOut):
+    messages: list[MessageOut]
 
 
 class ChatChunkBrief(BaseModel):

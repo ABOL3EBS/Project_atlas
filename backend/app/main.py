@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import chat, documents, health
+from .api import chat, conversations, documents, health
 
 logger = logging.getLogger("atlas")
 
@@ -28,3 +28,4 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(health.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(conversations.router, prefix="/api")

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     chroma_dir: str = "./data/chroma"
     sqlite_path: str = "./data/atlas.db"
     uploaded_dir: str = "./data/uploads"
+    conversation_db_path: str = "./data/conversations.db"
 
     default_knowledge_base_id: str = "default"
 

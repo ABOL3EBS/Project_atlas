@@ -4,6 +4,8 @@ from app.config import get_settings
 from app.embeddings import EmbeddingProvider, OllamaEmbeddingProvider
 from app.ingestion import ChunkingConfig
 from app.llm import LLMProvider, OllamaProvider
+from app.memory.conversation_store import ConversationStore
+from app.memory.selector import MemorySelector
 from app.retrieval import ChromaVectorStore, VectorStore
 from app.retrieval.retriever import Retriever
 from app.services.chat_service import ChatService
@@ -38,6 +40,19 @@ def get_document_store() -> DocumentStore:
     return DocumentStore(settings.sqlite_path)
 
 
+def get_conversation_store() -> ConversationStore:
+    settings = get_settings()
+    return ConversationStore(settings.conversation_db_path)
+
+
+def get_memory_selector() -> MemorySelector:
+    settings = get_settings()
+    embedding_provider = OllamaEmbeddingProvider(
+        settings.ollama_base_url, settings.embedding_model
+    )
+    return MemorySelector(embedding_provider)
+
+
 def get_ingestion_service() -> IngestionService:
     settings = get_settings()
     return IngestionService(
@@ -61,4 +76,8 @@ def get_chat_service() -> ChatService:
         retriever=retriever,
         llm_provider=get_llm_provider(),
         grounding_threshold=settings.grounding_threshold,
+        vector_store=get_vector_store(),
+        document_store=get_document_store(),
+        conversation_store=get_conversation_store(),
+        memory_selector=get_memory_selector(),
     )

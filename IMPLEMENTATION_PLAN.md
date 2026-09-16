@@ -2,7 +2,7 @@
 
 Source of truth for the Atlas project direction. This document lives in the repo so the plan is durable and not dependent on chat context. Review `ATLAS_PROJECT_SPEC.md` for the full product spec.
 
-Status: **M0/M1 complete — M2 complete**
+Status: **M0/M1 complete — M2 complete — M3 complete**
 
 ---
 
@@ -75,6 +75,8 @@ Users can change models without touching code. The app must detect provider/mode
 - Intent → retrieval decision flow; refusal for unsupported questions
 - SQLite conversation memory (short-term context, no full-history dumps)
 
+**M3 status:** done. `AtlasAgent` plans each turn via a JSON decision from the LLM (`none` for direct answers, or one of the four tools) with a safe fallback to `search_knowledge_base` on malformed/unknown output. `search_knowledge_base` and `compare_documents` are grounded by the M2 score threshold; `retrieve_document` is intent-gated (any evidence is sufficient). Conversation memory is selective (`MemorySelector`): only the most-similar messages within a 24-message window (max 3) are recalled. SSE now includes `conversation`, `decision`, `tool_call`, `tool_summary`, and `memory` events. REST: `GET /api/conversations`, `GET /api/conversations/{id}` (KB-scoped); `POST /api/chat` accepts `conversation_id` to resume a thread. Tests: memory store/selector, decision parser, tools, agent flows, conversations API (94+ tests).
+
 ### M4 — Retrieval Experiments
 - Baseline first: `embedding → top-k`
 - Experiments: `+ query rewrite`, `embedding → top-k → reranker`, `multi-query → dedup → reranker`
@@ -119,6 +121,7 @@ Unit / integration / resilience tests:
 - duplicate uploads, deletion, isolation (KB A cannot see KB B)
 - citation correctness, grounding-threshold rejection, unsupported questions
 - conversation context, tool selection
+- decision parser + planner fallback
 - prompt injection (document says "ignore instructions / reveal system prompt")
 - provider failures: Ollama unavailable, embedding failure, LLM failure
 - full integration: document → ingest → embed → retrieve → agent → answer → citation

@@ -19,8 +19,17 @@ class OllamaProvider(LLMProvider):
         self._base_url = base_url.rstrip("/")
         self._model = model
 
-    async def generate(self, prompt: str, *, system: str | None = None) -> str:
-        payload = {"model": self._model, "prompt": prompt, "system": system, "stream": False}
+    async def generate(
+        self, prompt: str, *, system: str | None = None, json_mode: bool = False
+    ) -> str:
+        payload = {
+            "model": self._model,
+            "prompt": prompt,
+            "system": system,
+            "stream": False,
+        }
+        if json_mode:
+            payload["format"] = "json"
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self._base_url}/api/generate", json=payload, timeout=300

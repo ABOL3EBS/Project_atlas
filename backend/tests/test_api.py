@@ -4,10 +4,16 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_chat_service, get_ingestion_service, get_settings
+from app.api.deps import (
+    get_chat_service,
+    get_conversation_store,
+    get_ingestion_service,
+    get_settings,
+)
 from app.config import Settings
 from app.ingestion import ChunkingConfig
 from app.main import app
+from app.memory.conversation_store import ConversationStore
 from app.retrieval.retriever import Retriever
 from app.services.chat_service import ChatService
 from app.services.document_store import DocumentStore
@@ -18,12 +24,15 @@ from tests.conftest import (
     FakeVectorStore,
 )
 
+SEARCH_PLAN = '{"tool": "search_knowledge_base", "arguments": {"query": "query", "top_k": 4}}'
+
 
 @pytest.fixture()
 def services(tmp_path: Path):
     vector_store = FakeVectorStore()
     embeddings = FakeEmbeddingProvider()
     document_store = DocumentStore(str(tmp_path / "atlas.db"))
+    conversation_store = ConversationStore(str(tmp_path / "conversations.db"))
     ingestion = IngestionService(
         vector_store=vector_store,
         embedding_provider=embeddings,
@@ -32,17 +41,25 @@ def services(tmp_path: Path):
         max_upload_size=1024 * 1024,
     )
     retriever = Retriever(vector_store=vector_store, embedding_provider=embeddings)
-    chat_service = ChatService(retriever=retriever, llm_provider=FakeLLMProvider())
+    chat_service = ChatService(
+        retriever=retriever,
+        llm_provider=FakeLLMProvider(),
+        vector_store=vector_store,
+        document_store=document_store,
+        conversation_store=conversation_store,
+    )
 
     def override_settings() -> Settings:
         return Settings(
             sqlite_path=str(tmp_path / "atlas.db"),
             chroma_dir=str(tmp_path / "chroma"),
+            conversation_db_path=str(tmp_path / "conversations.db"),
         )
 
     app.dependency_overrides[get_settings] = override_settings
     app.dependency_overrides[get_ingestion_service] = lambda: ingestion
     app.dependency_overrides[get_chat_service] = lambda: chat_service
+    app.dependency_overrides[get_conversation_store] = lambda: conversation_store
     yield chat_service
     app.dependency_overrides.clear()
 
@@ -72,7 +89,12 @@ def _replace_default_retriever(chat_service: ChatService, vector_store: FakeVect
     retriever = Retriever(
         vector_store=vector_store, embedding_provider=FakeEmbeddingProvider()
     )
-    replacement = ChatService(retriever=retriever, llm_provider=FakeLLMProvider())
+    replacement = ChatService(
+        retriever=retriever,
+        llm_provider=FakeLLMProvider(plan_response=SEARCH_PLAN),
+        vector_store=vector_store,
+        document_store=chat_service._document_store,
+    )
     app.dependency_overrides[get_chat_service] = lambda: replacement
     return replacement
 
@@ -111,11 +133,13 @@ def test_upload_malformed_pdf_returns_400_and_records_failure(client, services):
 
 def test_chat_provider_failure_emits_error_event(client, services):
     class ExplodingRetriever:
-        def search(self, knowledge_base_id: str, query: str):
+        def search(self, knowledge_base_id: str, query: str, top_k: int | None = None):
             raise RuntimeError("vector store unavailable")
 
     replacement = ChatService(
-        retriever=ExplodingRetriever(), llm_provider=FakeLLMProvider()
+        retriever=ExplodingRetriever(),
+        llm_provider=FakeLLMProvider(plan_response=SEARCH_PLAN),
+        vector_store=FakeVectorStore(),
     )
     app.dependency_overrides[get_chat_service] = lambda: replacement
 
@@ -168,11 +192,13 @@ def test_chat_streams_events_and_answer(client, services):
 
 def test_chat_reports_when_no_evidence(client, services):
     class NoResultsRetriever:
-        def search(self, knowledge_base_id: str, query: str):
+        def search(self, knowledge_base_id: str, query: str, top_k: int | None = None):
             return []
 
     replacement = ChatService(
-        retriever=NoResultsRetriever(), llm_provider=FakeLLMProvider()
+        retriever=NoResultsRetriever(),
+        llm_provider=FakeLLMProvider(plan_response=SEARCH_PLAN),
+        vector_store=FakeVectorStore(),
     )
     app.dependency_overrides[get_chat_service] = lambda: replacement
 
@@ -191,6 +217,86 @@ def test_health_reports_availability(client, services):
     response = client.get("/api/health")
     assert response.status_code == 200
     assert response.json()["status"] in {"ok", "degraded"}
+
+
+def test_chat_returns_and_persists_conversation(client, services):
+    response = client.post(
+        "/api/chat",
+        json={"message": "greetings", "knowledge_base_id": "kb-a"},
+    )
+    events = _parse_sse(response.text)
+    conversation_events = [e for e in events if e["type"] == "conversation"]
+    assert conversation_events
+    conversation_id = conversation_events[0]["conversation_id"]
+    assert conversation_id
+
+    detail = client.get(
+        f"/api/conversations/{conversation_id}",
+        params={"knowledge_base_id": "kb-a"},
+    )
+    assert detail.status_code == 200
+    assert detail.json()["messages"][0]["role"] == "user"
+    assert detail.json()["messages"][-1]["role"] == "assistant"
+
+
+def test_conversation_list_isolated_by_knowledge_base(client, services):
+    client.post("/api/chat", json={"message": "one", "knowledge_base_id": "kb-a"})
+    client.post("/api/chat", json={"message": "two", "knowledge_base_id": "kb-b"})
+
+    kb_a = client.get("/api/conversations", params={"knowledge_base_id": "kb-a"})
+    kb_b = client.get("/api/conversations", params={"knowledge_base_id": "kb-b"})
+    assert len(kb_a.json()) == 1
+    assert len(kb_b.json()) == 1
+
+
+def test_conversation_reuse_resumes_same_thread(client, services):
+    first = client.post(
+        "/api/chat", json={"message": "first", "knowledge_base_id": "kb-a"}
+    )
+    conversation_id = next(
+        e["conversation_id"]
+        for e in _parse_sse(first.text)
+        if e["type"] == "conversation"
+    )
+
+    second = client.post(
+        "/api/chat",
+        json={
+            "message": "second",
+            "knowledge_base_id": "kb-a",
+            "conversation_id": conversation_id,
+        },
+    )
+    resumed_id = next(
+        e["conversation_id"]
+        for e in _parse_sse(second.text)
+        if e["type"] == "conversation"
+    )
+    assert resumed_id == conversation_id
+
+    detail = client.get(
+        f"/api/conversations/{conversation_id}",
+        params={"knowledge_base_id": "kb-a"},
+    )
+    roles = [message["role"] for message in detail.json()["messages"]]
+    assert roles.count("user") == 2
+
+
+def test_conversation_detail_is_knowledge_base_scoped(client, services):
+    response = client.post(
+        "/api/chat", json={"message": "hello", "knowledge_base_id": "kb-a"}
+    )
+    conversation_id = next(
+        e["conversation_id"]
+        for e in _parse_sse(response.text)
+        if e["type"] == "conversation"
+    )
+
+    wrong_kb = client.get(
+        f"/api/conversations/{conversation_id}",
+        params={"knowledge_base_id": "kb-other"},
+    )
+    assert wrong_kb.status_code == 404
 
 
 def _parse_sse(text: str) -> list[dict]:

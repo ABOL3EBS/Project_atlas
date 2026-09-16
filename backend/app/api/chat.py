@@ -20,7 +20,9 @@ async def chat(
     knowledge_base_id = request.knowledge_base_id or settings.default_knowledge_base_id
 
     async def event_stream():
-        async for event in chat_service.run(knowledge_base_id, request.message):
+        async for event in chat_service.run(
+            knowledge_base_id, request.message, request.conversation_id
+        ):
             yield embed_event(event)
 
     return StreamingResponse(

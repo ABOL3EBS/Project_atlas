@@ -29,10 +29,44 @@ class Retriever:
         self._top_k = top_k
         self._min_score = min_score
 
-    def search(self, knowledge_base_id: str, query: str) -> list[RetrievedChunk]:
+    def search(
+        self, knowledge_base_id: str, query: str, top_k: int | None = None
+    ) -> list[RetrievedChunk]:
         query_embedding = self._embedding_provider.embed_query(query)
         raw = self._vector_store.query(
-            knowledge_base_id, query_embedding, top_k=self._top_k, min_score=self._min_score
+            knowledge_base_id,
+            query_embedding,
+            top_k=top_k or self._top_k,
+            min_score=self._min_score,
+        )
+        results = [
+            RetrievedChunk(
+                text=item["text"],
+                chunk_id=item["chunk_id"],
+                document_id=item["document_id"],
+                document_name=item["document_name"],
+                page=item["page"],
+                section=item["section"],
+                score=item["score"],
+            )
+            for item in raw
+        ]
+        return [item for item in results if item.score >= self._min_score]
+
+    def search_in_document(
+        self,
+        knowledge_base_id: str,
+        query: str,
+        document_id: str,
+        top_k: int | None = None,
+    ) -> list[RetrievedChunk]:
+        query_embedding = self._embedding_provider.embed_query(query)
+        raw = self._vector_store.query(
+            knowledge_base_id,
+            query_embedding,
+            top_k=top_k or self._top_k,
+            min_score=self._min_score,
+            where={"document_id": document_id},
         )
         results = [
             RetrievedChunk(

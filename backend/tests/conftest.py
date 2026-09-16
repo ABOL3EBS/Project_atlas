@@ -6,10 +6,21 @@ from app.retrieval.base import VectorStore
 
 
 class FakeLLMProvider(LLMProvider):
-    def __init__(self, tokens: list[str] | None = None):
+    def __init__(
+        self,
+        tokens: list[str] | None = None,
+        plan_response: str = (
+            '{"tool": "search_knowledge_base", "arguments": {"query": "question", "top_k": 4}}'
+        ),
+    ):
         self._tokens = tokens or ["The", " system", " works."]
+        self.plan_response = plan_response
 
-    async def generate(self, prompt: str, *, system: str | None = None) -> str:
+    async def generate(
+        self, prompt: str, *, system: str | None = None, json_mode: bool = False
+    ) -> str:
+        if json_mode:
+            return self.plan_response
         return "".join(self._tokens)
 
     async def stream(self, prompt: str, *, system: str | None = None):
@@ -42,6 +53,7 @@ class FakeEmbeddingProvider(EmbeddingProvider):
 class FakeVectorStore(VectorStore):
     def __init__(self):
         self.chunks: list[tuple[str, list]] = []
+        self.chunked: list[dict] = []
         self.deleted: list[tuple[str, str]] = []
         self.query_results: list[dict] = []
 
@@ -57,8 +69,24 @@ class FakeVectorStore(VectorStore):
         embedding: list[float],
         top_k: int,
         min_score: float | None = None,
+        where: dict = None,
     ) -> list[dict]:
+        if where:
+            return [
+                item
+                for item in self.query_results
+                if item.get("document_id") == where.get("document_id")
+            ]
         return self.query_results
+
+    def get_document_chunks(
+        self, knowledge_base_id: str, document_id: str, limit: int = 12
+    ) -> list[dict]:
+        return [
+            item
+            for item in self.chunked
+            if item.get("document_id") == document_id
+        ][:limit]
 
     def delete_document(self, knowledge_base_id: str, document_id: str) -> None:
         self.deleted.append((knowledge_base_id, document_id))

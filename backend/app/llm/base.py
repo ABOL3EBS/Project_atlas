@@ -4,7 +4,9 @@ from collections.abc import AsyncIterator
 
 class LLMProvider(ABC):
     @abstractmethod
-    async def generate(self, prompt: str, *, system: str | None = None) -> str:
+    async def generate(
+        self, prompt: str, *, system: str | None = None, json_mode: bool = False
+    ) -> str:
         raise NotImplementedError
 
     @abstractmethod

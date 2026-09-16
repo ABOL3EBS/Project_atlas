@@ -1,18 +1,26 @@
 from app.retrieval.retriever import RetrievedChunk
 from app.services.chat_service import NOT_FOUND_MESSAGE, ChatService
+from tests.conftest import FakeVectorStore
 
 
 class StubRetriever:
     def __init__(self, chunks: list[RetrievedChunk]):
         self._chunks = chunks
 
-    def search(self, knowledge_base_id: str, query: str) -> list[RetrievedChunk]:
+    def search(
+        self, knowledge_base_id: str, query: str, top_k: int | None = None
+    ) -> list[RetrievedChunk]:
         return self._chunks
 
 
 class RecordingLLM:
     def __init__(self):
         self.system_calls: list[str] = []
+
+    async def generate(
+        self, prompt: str, *, system: str | None = None, json_mode: bool = False
+    ) -> str:
+        return "not a decision"
 
     async def stream(self, prompt: str, *, system: str | None = None):
         self.system_calls.append(system or "")
@@ -40,6 +48,7 @@ def _service(chunks: list[RetrievedChunk], llm: RecordingLLM | None = None) -> C
         retriever=StubRetriever(chunks),
         llm_provider=llm or RecordingLLM(),
         grounding_threshold=0.45,
+        vector_store=FakeVectorStore(),
     )
 
 

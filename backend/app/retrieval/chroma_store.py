@@ -37,14 +37,36 @@ class ChromaVectorStore(VectorStore):
         embedding: list[float],
         top_k: int,
         min_score: float | None = None,
+        where: dict | None = None,
     ) -> list[dict]:
         collection = self._collection(knowledge_base_id)
         result = collection.query(
             query_embeddings=[embedding],
             n_results=top_k,
             include=["documents", "metadatas", "distances"],
+            where=where,
         )
         return self._format_results(result, min_score)
+
+    def get_document_chunks(
+        self, knowledge_base_id: str, document_id: str, limit: int = 12
+    ) -> list[dict]:
+        collection = self._collection(knowledge_base_id)
+        result = collection.get(
+            where={"document_id": document_id},
+            include=["documents", "metadatas"],
+            limit=limit,
+        )
+        formatted = self._format_results(
+            {
+                "ids": [result["ids"]],
+                "documents": [result["documents"]],
+                "metadatas": [result["metadatas"]],
+                "distances": [[0.0] * len(result["ids"])],
+            },
+            min_score=None,
+        )
+        return _order_by_chunk_index(formatted)
 
     def delete_document(self, knowledge_base_id: str, document_id: str) -> None:
         collection = self._collection(knowledge_base_id)
@@ -104,3 +126,14 @@ class ChromaVectorStore(VectorStore):
 def _collection_name(knowledge_base_id: str) -> str:
     sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", knowledge_base_id)
     return f"kb_{sanitized}"[:63]
+
+
+def _order_by_chunk_index(items: list[dict]) -> list[dict]:
+    def _index(item: dict) -> int:
+        chunk_id = item["chunk_id"]
+        try:
+            return int(chunk_id.rsplit("-", 1)[1])
+        except (IndexError, ValueError):
+            return 0
+
+    return sorted(items, key=_index)

@@ -7,18 +7,23 @@ from app.llm import OllamaProvider
 from app.llm import ollama_provider as llm_provider_module
 from app.retrieval.retriever import RetrievedChunk
 from app.services.chat_service import ChatService
-from tests.conftest import FakeLLMProvider
+from tests.conftest import FakeLLMProvider, FakeVectorStore
 
 
 class ExplodingRetriever:
     def __init__(self, error: Exception):
         self._error = error
 
-    def search(self, knowledge_base_id: str, query: str) -> list[RetrievedChunk]:
+    def search(self, knowledge_base_id: str, query: str, top_k: int | None = None):
         raise self._error
 
 
 class RaisingLLM:
+    async def generate(
+        self, prompt: str, *, system: str | None = None, json_mode: bool = False
+    ) -> str:
+        return "not a decision"
+
     async def stream(self, prompt: str, *, system: str | None = None):
         raise RuntimeError("llm generation failed")
         yield  # pragma: no cover - marks this as an async generator
@@ -28,7 +33,9 @@ class StubRetriever:
     def __init__(self, chunks: list[RetrievedChunk]):
         self._chunks = chunks
 
-    def search(self, knowledge_base_id: str, query: str) -> list[RetrievedChunk]:
+    def search(
+        self, knowledge_base_id: str, query: str, top_k: int | None = None
+    ) -> list[RetrievedChunk]:
         return self._chunks
 
 
@@ -50,7 +57,9 @@ async def _events(service: ChatService) -> list[dict]:
 
 async def test_embedding_failure_emits_controlled_error_event():
     service = ChatService(
-        ExplodingRetriever(RuntimeError("embedding service down")), FakeLLMProvider()
+        ExplodingRetriever(RuntimeError("embedding service down")),
+        FakeLLMProvider(),
+        vector_store=FakeVectorStore(),
     )
     events = await _events(service)
     errors = [event for event in events if event["type"] == "error"]
@@ -60,14 +69,20 @@ async def test_embedding_failure_emits_controlled_error_event():
 
 async def test_vector_store_failure_emits_controlled_error_event():
     service = ChatService(
-        ExplodingRetriever(RuntimeError("chroma unavailable")), FakeLLMProvider()
+        ExplodingRetriever(RuntimeError("chroma unavailable")),
+        FakeLLMProvider(),
+        vector_store=FakeVectorStore(),
     )
     events = await _events(service)
     assert any(event["type"] == "error" for event in events)
 
 
 async def test_llm_failure_emits_controlled_error_event():
-    service = ChatService(StubRetriever([_chunk()]), RaisingLLM())
+    service = ChatService(
+        StubRetriever([_chunk()]),
+        RaisingLLM(),
+        vector_store=FakeVectorStore(),
+    )
     events = await _events(service)
     errors = [event for event in events if event["type"] == "error"]
     assert errors

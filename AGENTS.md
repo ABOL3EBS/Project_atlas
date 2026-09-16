@@ -8,9 +8,9 @@
 
 ## Current Status
 
-The project is currently implementing **M0 + M1 + M2**.
+The project is currently implementing **M0 + M1 + M2 + M3**.
 
-Do not implement M3 or later unless explicitly instructed after M2 acceptance criteria pass.
+M3 (agent + tools + conversation memory) is complete: the user explicitly authorized M3 after M2 passed. Do not implement M4 or later unless explicitly instructed after M3 acceptance criteria pass.
 
 ## Engineering Rules
 
