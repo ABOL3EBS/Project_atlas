@@ -145,14 +145,21 @@ true_accept (48)       1.0000  1.0000  1.0000  1.0000  1.0000  1.0000  0.7500
 false_accept (20)      1.0000  1.0000  0.9500  0.7500  0.2500  0.0000  0.0000
 ```
 
-The 0.45 default was a knife-edge (0.95 false-accept): 19 of 20 unsupported queries
-cleared it. The measured cliff is **0.60** — every supported question scores ≥ 0.604,
-every unsupported one ≤ 0.587 — so the default threshold moved **0.45 → 0.60**
-(only after measurement, per the M4/M5 contract). Effect on the same real recordings:
-gate false-accepts 19/20 → 0/20, supported acceptance unchanged 48/48, projected E2E
-unsupported rejection 0.20 → 0.55. The residual unsupported answers are the planner
-answering ~half of them directly (bypassing the gate); that is a measured finding, not
-silently fixed by the threshold change.
+The **gate calibration** (isolated single-search measurement) is well-separated at
+**0.60** — every supported question scores ≥ 0.604, every unsupported one ≤ 0.587 —
+so the default threshold moved **0.45 → 0.60** (only after measurement, per the
+M4/M5 contract). Note the sample: "0.00" at 0.60 means **0/20 observed**, not a hard
+guarantee — the cliff from 0.55 to 0.60 is one grid step wide on 20 questions, and a
+21st adversarial query could land in the 0.587–0.60 gap. Effect on the same real
+recordings: gate false-accepts 19/20 → 0/20, supported acceptance unchanged 48/48,
+projected E2E unsupported rejection 0.20 → 0.55.
+
+Keep the two tables separate: **threshold calibration fixes the gate — it does not fix
+the planner.** End-to-end rejection was 0.20 because the planner answered 16/20
+unsupported questions without ever searching, so the gate was never reached for most of
+them; leaving that leak open is a follow-up milestone item (planner routing), not
+something folded into M6. A separate known gap: citation precision 0.595 (~40% of cited
+documents don't precision-match) is measured and tracked, not silently fixed.
 
 Reproduce:
 

@@ -198,6 +198,20 @@ false_accept           1.0000  1.0000  0.9500  0.7500  0.2500  0.0000  0.0000
   accepting all 48 supported ones — false_accept 0.95 → 0.00 at zero true-accept cost.
 - The band is tight (everything sits in ~0.45–0.65), so 0.60 is a knife-edge too, but
   on this corpus it is the exact separator (margin 0.017).
+- Sample-size caveat: "0.00" at 0.60 is **0/20 observed**, not a hard guarantee. The
+  cliff from 0.55 (0.25) to 0.60 (0.0) is one grid step wide on a denominator of 20;
+  a 21st adversarial out-of-domain question could plausibly land in the 0.587–0.60 gap.
+  The default choice is still justified — it beat the alternatives cleanly — but 0.60
+  is the best observed separator on this corpus, not a proof.
+
+**The result is two-layered — keep the two tables separate.** The gate's
+**calibration** is well-separated at 0.60 on the isolated single-search measurement
+(0/20 false-accepts, 48/48 true-accepts). The **end-to-end** unsupported rejection was
+only 0.20 because the planner skipped search entirely on 16/20 unsupported questions —
+the leak is the planner's decision to route around the gate, not the threshold. The
+threshold change fixes the gate; it does not fix the planner. The planner-routing
+behavior is a legitimate follow-up scope for a later milestone (not folded into M6's
+"done").
 
 **Decision (measured delta):** default `grounding_threshold` moved **0.45 → 0.60**
 (`config.py`, `ChatService`, `AtlasAgent`). Measured effect: gate false-accepts 19/20 →
@@ -206,13 +220,15 @@ the same real recordings rises 0.20 → 0.55 (the 7 gate-passed false accepts ar
 < 0.60; the 10 planner-direct answers are untouched by the threshold). The two
 planner-behavior findings are out of scope for the threshold change and are NOT
 "fixed" by it: (a) the planner answers ~half the out-of-domain questions directly,
-bypassing retrieval/grounding entirely; (b) `retrieve_document` empty-evidence handling
-is a separate 1-case miss. Neither is silently papered over; both stay as measured
-observations for future milestones.
+bypassing retrieval/grounding entirely (deferred follow-up scope); (b)
+`retrieve_document` empty-evidence handling is a separate 1-case miss. Neither is
+silently papered over; both stay as measured observations.
 
 **Honest limits:** the faithfulness judge is the local 2b model (38/42 = 0.9048 agreed
-with human-intended grounding; 4 disagreements) and citation precision counts every
-cited document as written, including multi-doc `compare_documents` answers.
+with human-intended grounding; 4 disagreements); citation precision (0.5952) is a
+known gap — ~40% of cited documents are not precision-matching `expected_sources` on the
+supported set, and it counts every cited document as written, including multi-doc
+`compare_documents` answers (known gap, tracked in the M6 results JSON; no silent fix).
 
 Acceptance: every metric backed by real runner output in `evaluation/results/`; a
 threshold recommendation with a measured precision/rejection table; dataset JSON

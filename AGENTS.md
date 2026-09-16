@@ -34,8 +34,11 @@ calibration found a measured cliff at 0.60 (supported floor 0.604 vs. unsupporte
 ceiling 0.587), so the production default `grounding_threshold` was changed
 **0.45 → 0.60** on that measured delta (config.py + service/agent defaults).
 Measured caveats that remain open (not silently fixed): the planner answers ~half
-the out-of-domain questions directly, bypassing the grounding gate; and the
-faithfulness judge is the local 2b model.
+the out-of-domain questions directly, bypassing the grounding gate (threshold change
+fixes the gate, not the planner; routing is follow-up scope); citation precision is
+0.595 (a known gap, tracked in the M6 results JSON); the faithfulness judge is the
+local 2b model; and "0/20 false-accepts" at 0.60 is an observed sample on 20
+questions, not a hard guarantee.
 
 Do not implement M7 or later unless explicitly instructed after M6 acceptance
 criteria pass.
