@@ -1,0 +1,146 @@
+[
+  {
+    "question": "Which photovoltaic module technology has the highest peak efficiency and what range does it fall in?",
+    "expected_sources": ["solar_panels.md"]
+  },
+  {
+    "question": "About how much power does a solar array lose per degree above 25 Celsius, and why does a hot rooftop matter?",
+    "expected_sources": ["solar_panels.md"]
+  },
+  {
+    "question": "What is the typical warranty guarantee for a solar panel's power output after ten and after twenty five years?",
+    "expected_sources": ["solar_panels.md"]
+  },
+  {
+    "question": "What devices must be present between a large commercial solar array and the distribution network?",
+    "expected_sources": ["solar_panels.md"]
+  },
+  {
+    "question": "Why does lithium iron phosphate resist thermal runaway better than nickel manganese cobalt?",
+    "expected_sources": ["batteries.md"]
+  },
+  {
+    "question": "At what depth of discharge should lead-acid batteries be kept, and what happens if they are drained deeper?",
+    "expected_sources": ["batteries.md"]
+  },
+  {
+    "question": "How much extra energy can an MPPT charge controller recover compared to a PWM controller?",
+    "expected_sources": ["batteries.md"]
+  },
+  {
+    "question": "What chemistry is commonly used for stationary storage and what property makes it better than NMC for that job?",
+    "expected_sources": ["batteries.md"]
+  },
+  {
+    "question": "What is a sensible starting value for shared_buffers on a dedicated database server and what does work_mem control?",
+    "expected_sources": ["postgresql_tuning.md"]
+  },
+  {
+    "question": "When does the PostgreSQL planner choose an index scan over a sequential scan, and which index type suits array containment?",
+    "expected_sources": ["postgresql_tuning.md"]
+  },
+  {
+    "question": "Why must autovacuum run regularly, and what happens to planner statistics after a large bulk load?",
+    "expected_sources": ["postgresql_tuning.md"]
+  },
+  {
+    "question": "What latency trade-off does disabling synchronous_commit introduce and how do large checkpoints help?",
+    "expected_sources": ["postgresql_tuning.md"]
+  },
+  {
+    "question": "How do sendfile, tcp_nopush, and tcp_nodelay affect static file serving performance in Nginx?",
+    "expected_sources": ["nginx_config.md"]
+  },
+  {
+    "question": "Which load balancing policies can an upstream block use and what must the proxy_set_header block pass to the application?",
+    "expected_sources": ["nginx_config.md"]
+  },
+  {
+    "question": "What is required for TLS termination and how should HTTP Strict Transport Security be configured?",
+    "expected_sources": ["nginx_config.md"]
+  },
+  {
+    "question": "Where should security headers be declared so they apply to every virtual host?",
+    "expected_sources": ["nginx_config.md"]
+  },
+  {
+    "question": "What is the difference between CBC and GCM block cipher modes and why is ECB forbidden?",
+    "expected_sources": ["cryptography.md"]
+  },
+  {
+    "question": "Why is RSA unsuitable for bulk payload encryption and what do protocols use public key crypto for?",
+    "expected_sources": ["cryptography.md"]
+  },
+  {
+    "question": "How does ephemeral Diffie-Hellman provide forward secrecy and what weakness does the classic algorithm have?",
+    "expected_sources": ["cryptography.md"]
+  },
+  {
+    "question": "How are password digests supposed to be stored and why is a fast hash insufficient?",
+    "expected_sources": ["cryptography.md"]
+  },
+  {
+    "question": "What does the testing pyramid say about the volume and cost of unit versus end-to-end tests?",
+    "expected_sources": ["testing.md"]
+  },
+  {
+    "question": "What happens when a property-based test finds a failing example and how does it help debugging?",
+    "expected_sources": ["testing.md"]
+  },
+  {
+    "question": "What distinguishes a fake, a stub, and a mock test double?",
+    "expected_sources": ["testing.md"]
+  },
+  {
+    "question": "Why can a suite hit high line coverage and still miss important defects, and where does this matter most?",
+    "expected_sources": ["testing.md"]
+  },
+  {
+    "question": "Why should a Dockerfile put frequently changing instructions at the bottom of the file?",
+    "expected_sources": ["containers.md"]
+  },
+  {
+    "question": "What does a multi-stage build achieve and how does the final stage stay small?",
+    "expected_sources": ["containers.md"]
+  },
+  {
+    "question": "How should secrets be delivered to a container instead of baked into the image?",
+    "expected_sources": ["containers.md"]
+  },
+  {
+    "question": "How do containers on the same bridge network resolve each other and where should inter-container traffic stay?",
+    "expected_sources": ["containers.md"]
+  },
+  {
+    "question": "Why can a hash index not satisfy a range predicate while a sorted index can?",
+    "expected_sources": ["database_indexes.md"]
+  },
+  {
+    "question": "Which column should lead a composite index and how should equality and range columns be ordered?",
+    "expected_sources": ["database_indexes.md"]
+  },
+  {
+    "question": "What is a covering index and what is the write-time trade-off of adding one?",
+    "expected_sources": ["database_indexes.md"]
+  },
+  {
+    "question": "Why do unused indexes tax every write, and why is dropping and rebuilding indexes faster during a bulk load?",
+    "expected_sources": ["database_indexes.md"]
+  },
+  {
+    "question": "When does least-connections balancing beat plain round robin?",
+    "expected_sources": ["load_balancing.md"]
+  },
+  {
+    "question": "What does session affinity simplify and how does it weaken failover?",
+    "expected_sources": ["load_balancing.md"]
+  },
+  {
+    "question": "How do active and passive health checks differ in reaction time and added load?",
+    "expected_sources": ["load_balancing.md"]
+  },
+  {
+    "question": "What are the caching limitations of DNS-based global load balancing?",
+    "expected_sources": ["load_balancing.md"]
+  }
+]

@@ -2,7 +2,7 @@
 
 Source of truth for the Atlas project direction. This document lives in the repo so the plan is durable and not dependent on chat context. Review `ATLAS_PROJECT_SPEC.md` for the full product spec.
 
-Status: **M0/M1 complete — M2 complete — M3 complete**
+Status: **M0/M1 complete — M2 complete — M3 complete — M4 complete**
 
 ---
 
@@ -82,12 +82,25 @@ Users can change models without touching code. The app must detect provider/mode
 - Experiments: `+ query rewrite`, `embedding → top-k → reranker`, `multi-query → dedup → reranker`
 - Compare and keep only measurable wins
 
-| Pipeline | Recall@5 | MRR | Latency |
+**M4 status:** done. Experiment harness under `app/retrieval/pipelines.py` (swappable
+`Reranker` / `QueryTransformer` interfaces, zero new dependencies: BM25 reranker on the
+stdlib), `app/evaluation/metrics.py` + `dataset.py`, CLI runner
+`evaluation/runners/run_retrieval.py`. Evaluation corpus `knowledge/eval/` (9 docs, 27
+chunks) with a 36-question labelled dataset `evaluation/datasets/retrieval.json`.
+Measured against Ollama (`nomic-embed-text`, `gemma2:2b`), top_k=5,
+chunk_size=250/overlap=25, candidate pool=25:
+
+| Pipeline | Recall@5 | MRR | Latency (ms) |
 |---|---|---|---|
-| Baseline (embed → top-k) | — | — | — |
-| + Query rewrite | — | — | — |
-| + Reranking | — | — | — |
-| Multi-query → dedup → rerank | — | — | — |
+| Baseline (embed → top-k) | 1.0000 | 0.9583 | 17.7 |
+| + Query rewrite | 1.0000 | 0.9722 | 462.3 |
+| + Reranking | 1.0000 | 1.0000 | 19.0 |
+| Multi-query → dedup → rerank | 1.0000 | 1.0000 | 684.4 |
+
+Outcome: BM25 reranking is the only adopted improvement — it fixes the 3 ordering
+failures baseline had and costs ~1 ms. LLM rewrite/multi-query add 400–670 ms with no
+measurable benefit on this dataset, so production search stays on embedding search +
+BM25 rerank. Reproduce: `uv run python ../evaluation/runners/run_retrieval.py`.
 
 ### M5 — Observability / Trace
 - Execution-event model (safe observable events only)

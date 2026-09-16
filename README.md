@@ -5,9 +5,10 @@ ingestion, semantic retrieval, agentic tool selection, reranking, conversational
 memory, citation-backed generation, execution tracing, and automated evaluation —
 fully runnable locally for $0.
 
-> **Status**: implementing **M0 + M1 + M2 + M3** (local RAG vertical slice + agent
-> with tools and conversation memory). M4+ unless explicitly instructed. See
-> `IMPLEMENTATION_PLAN.md` for the plan and `ATLAS_PROJECT_SPEC.md` for the full spec.
+> **Status**: implementing **M0 + M1 + M2 + M3 + M4** (local RAG vertical slice,
+> agent with tools and conversation memory, measured retrieval experiments). M5+
+> unless explicitly instructed. See `IMPLEMENTATION_PLAN.md` for the plan and
+> `ATLAS_PROJECT_SPEC.md` for the full spec.
 
 ## Stack
 
@@ -38,6 +39,40 @@ Verify: `GET http://localhost:8000/api/health`
 | GET | `/api/conversations` | List conversations for a knowledge base |
 | GET | `/api/conversations/{id}` | Conversation detail (KB-scoped) |
 | GET | `/api/health` | Provider availability |
+
+### Retrieval experiments (M4)
+
+Every pipeline is measured against the real evaluation dataset
+(`knowledge/eval/` corpus, 36 questions with hand-labelled `expected_sources`),
+run locally with `nomic-embed-text` + ChromaDB and `gemma2:2b` for the LLM stages.
+Results are written to `evaluation/results/`; nothing is estimated or fabricated.
+
+```
+Retrieval Experiment Results
+Dataset: 36 questions · top_k=5 · chunk_size=250/overlap=25 · candidate pool=25
+
+Pipeline                     Recall@5      MRR    Latency (ms)
+-------------------------------------------------------------
+Baseline                       1.0000   0.9583           17.7
++ Query Rewrite (LLM)          1.0000   0.9722          462.3
++ Reranking (BM25)             1.0000   1.0000           19.0
+Multi-query → Dedup → Rerank   1.0000   1.0000          684.4
+-------------------------------------------------------------
+Latency is per-query wall time including every pipeline stage.
+```
+
+What the measurements say: all variants already retrieve every expected document at
+top-5 (the corpus is small and topically clean). The difference is **ordering** —
+baseline places the wrong related-topic document first in 3 of 36 questions, and
+BM25 reranking fixes all three for ~1 ms of extra cost. The LLM stages (query
+rewrite + multi-query) add 400–670 ms per query and produce no measurable benefit
+on this dataset, so the production search tool stays on plain embedding search,
+with reranking as the one adopted improvement. Reproduce with:
+
+```bash
+cd backend
+uv run python ../evaluation/runners/run_retrieval.py
+```
 
 ### Tests & lint
 
