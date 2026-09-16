@@ -23,6 +23,7 @@ chroma/
 node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/*.tsbuildinfo
 
 # OS / editor
 .DS_Store

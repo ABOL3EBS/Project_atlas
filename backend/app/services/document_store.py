@@ -69,6 +69,24 @@ class DocumentStore:
                 (DocumentStatus.FAILED.value, error, document_id),
             )
 
+    def list_knowledge_bases(self) -> list[dict]:
+        with connect(self._path) as connection:
+            rows = connection.execute(
+                "SELECT knowledge_base_id, COUNT(*) AS document_count, "
+                "COALESCE(SUM(chunk_count), 0) AS chunk_count, "
+                "MIN(created_at) AS created_at "
+                "FROM documents GROUP BY knowledge_base_id ORDER BY created_at",
+            ).fetchall()
+        return [
+            {
+                "knowledge_base_id": row[0],
+                "document_count": row[1],
+                "chunk_count": row[2],
+                "created_at": row[3],
+            }
+            for row in rows
+        ]
+
     def list(self, knowledge_base_id: str) -> list[dict]:
         with connect(self._path) as connection:
             rows = connection.execute(

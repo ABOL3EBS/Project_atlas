@@ -8,7 +8,7 @@
 
 ## Current Status
 
-The project has completed **M0 + M1 + M2 + M3 + M4 + M5 + M6**.
+The project has completed **M0 + M1 + M2 + M3 + M4 + M5 + M6 + M7**.
 
 M4 (retrieval experiments) produced real measured results on `knowledge/eval/`
 (12 docs, 39 chunks) + a 48-question dataset (see `IMPLEMENTATION_PLAN.md`);
@@ -40,7 +40,23 @@ fixes the gate, not the planner; routing is follow-up scope); citation precision
 local 2b model; and "0/20 false-accepts" at 0.60 is an observed sample on 20
 questions, not a hard guarantee.
 
-Do not implement M7 or later unless explicitly instructed after M6 acceptance
+M7 (frontend) is complete: a Vite + React + TS + Tailwind app in `frontend/` built
+against the real backend contracts (UI source of truth:
+`frontend/src/components/agent-dashboard-spec.md`). Screens: Chat (streaming SSE,
+markdown, clickable citations with a real-chunk-text drawer, conversation history,
+KB selector, trace toggle), Knowledge Base (upload, status badges, delete, preview),
+per-turn Execution Trace panel (live streamed events, then the precise persisted
+trace; retrieved sources; total/retrieval/generation latency), and Settings (live
+health; read-only). Two **additive read-only** endpoints were added for spec features
+the API could not express: `GET /api/documents/knowledge-bases` and `GET
+/api/documents/{document_id}/chunks`. Trace metadata still never carries document
+text — the UI fetches real chunk text from the document chunks endpoint at view
+time, never from trace data. Settings is read-only by design (runtime config is
+`.env`-driven; no settings API exists). Verified: 167 backend tests, `ruff` clean,
+frontend `tsc` + `vite build` clean, live smoke test of upload → chat SSE →
+citations → trace including the grounding-rejection path.
+
+Do not implement M8 or later unless explicitly instructed after M7 acceptance
 criteria pass.
 
 ## M5 Trace Contract

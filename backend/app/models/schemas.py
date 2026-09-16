@@ -12,6 +12,23 @@ class DocumentOut(BaseModel):
     created_at: str
 
 
+class IsolatedKnowledgeBaseOut(BaseModel):
+    id: str
+    document_count: int
+    chunk_count: int
+    created_at: str | None = None
+
+
+class DocumentChunkOut(BaseModel):
+    knowledge_base_id: str
+    document_id: str
+    document_name: str
+    chunk_id: str
+    text: str
+    page: int | None = None
+    section: str | None = None
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4096)
     knowledge_base_id: str = "default"

@@ -5,16 +5,16 @@ ingestion, semantic retrieval, agentic tool selection, reranking, conversational
 memory, citation-backed generation, execution tracing, and automated evaluation —
 fully runnable locally for $0.
 
-> **Status**: **M0–M6 complete** (local RAG vertical slice, agent with tools and
+> **Status**: **M0–M7 complete** (local RAG vertical slice, agent with tools and
 > conversation memory, measured retrieval experiments, execution trace/observability,
-> answer-level evaluation + grounding threshold calibration). M7+ not started; only on
-> explicit instruction. See `IMPLEMENTATION_PLAN.md` for the plan and
-> `ATLAS_PROJECT_SPEC.md` for the spec.
+> answer-level evaluation + grounding threshold calibration, and a full
+> React/TypeScript frontend). M8 not started; only on explicit instruction. See
+> `IMPLEMENTATION_PLAN.md` for the plan and `ATLAS_PROJECT_SPEC.md` for the spec.
 
 ## Stack
 
 - Backend: Python 3.12 (uv), FastAPI, ChromaDB, Ollama (gemma2 / nomic-embed-text)
-- Frontend: React + TypeScript + Vite + Tailwind (M7)
+- Frontend: React + TypeScript + Vite + Tailwind (M7) — in `frontend/`
 - Infra: Docker Compose (M8)
 
 ## Quick start (backend)
@@ -29,12 +29,33 @@ uv run uvicorn app.main:app --port 8000
 
 Verify: `GET http://localhost:8000/api/health`
 
+### Frontend (M7)
+
+```bash
+cd frontend
+npm install
+npm run dev        # → http://localhost:5173 (Vite proxies /api → :8000)
+```
+
+UI source of truth: `frontend/src/components/agent-dashboard-spec.md`. Screens:
+**Chat** (streaming SSE answers with markdown, clickable citation chips that open a
+right-side drawer with the real chunk text, empty-state example chips, conversation
+history + new chat, knowledge-base selector, "Show trace" toggle), **Knowledge Base**
+(upload dropzone, status badges, delete-with-confirm, file preview), **Execution
+Trace** panel (per assistant turn: live event timeline built from the streamed SSE
+events, replaced by the precise persisted trace when the turn completes, retrieved
+sources, and total/retrieval/generation latency), and **Settings** (live `/api/health`
+status; configuration is read-only because runtime settings are `.env`-driven in the
+backend). Build/typecheck: `npm run build`, `npm run typecheck`.
+
 ### API
 
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/documents/upload` | Upload PDF/markdown/txt (multipart, `knowledge_base_id` form field) |
 | GET | `/api/documents` | List documents for a knowledge base |
+| GET | `/api/documents/knowledge-bases` | List knowledge bases + doc/chunk counts (M7) |
+| GET | `/api/documents/{id}/chunks` | Real chunk text for a document, KB-scoped (M7) |
 | DELETE | `/api/documents/{id}` | Delete a document and its vectors |
 | POST | `/api/chat` | Ask a question; SSE event stream (decision/tool_call/retrieval/token/done/error/trace/…). Pass `conversation_id` to resume a thread |
 | GET | `/api/conversations` | List conversations for a knowledge base |

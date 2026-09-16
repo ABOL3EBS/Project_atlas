@@ -62,6 +62,17 @@ class FakeVectorStore(VectorStore):
     ) -> None:
         for chunk in chunks:
             self.chunks.append((knowledge_base_id, chunk))
+            self.chunked.append(
+                {
+                    "chunk_id": chunk.chunk_id,
+                    "text": chunk.text,
+                    "document_id": chunk.document_id,
+                    "document_name": chunk.document_name,
+                    "page": chunk.page,
+                    "section": chunk.section,
+                    "score": 1.0,
+                }
+            )
 
     def query(
         self,

@@ -7,9 +7,11 @@ from fastapi.testclient import TestClient
 from app.api.deps import (
     get_chat_service,
     get_conversation_store,
+    get_document_store,
     get_ingestion_service,
     get_settings,
     get_trace_store,
+    get_vector_store,
 )
 from app.config import Settings
 from app.ingestion import ChunkingConfig
@@ -66,6 +68,8 @@ def services(tmp_path: Path):
     app.dependency_overrides[get_chat_service] = lambda: chat_service
     app.dependency_overrides[get_conversation_store] = lambda: conversation_store
     app.dependency_overrides[get_trace_store] = lambda: trace_store
+    app.dependency_overrides[get_document_store] = lambda: document_store
+    app.dependency_overrides[get_vector_store] = lambda: vector_store
     yield chat_service
     app.dependency_overrides.clear()
 
@@ -449,3 +453,48 @@ def _parse_sse(text: str) -> list[dict]:
         payload["type"] = event_type
         events.append(payload)
     return events
+
+
+def test_list_knowledge_bases(client, services):
+    client.post(
+        "/api/documents/upload",
+        files={"file": ("a.txt", b"content a")},
+        data={"knowledge_base_id": "kb-1"},
+    )
+    client.post(
+        "/api/documents/upload",
+        files={"file": ("b.txt", b"content b")},
+        data={"knowledge_base_id": "kb-2"},
+    )
+    response = client.get("/api/documents/knowledge-bases")
+    assert response.status_code == 200
+    ids = [kb["id"] for kb in response.json()]
+    assert "kb-1" in ids
+    assert "kb-2" in ids
+    kb1 = next(kb for kb in response.json() if kb["id"] == "kb-1")
+    assert kb1["document_count"] >= 1
+
+
+def test_list_knowledge_bases_always_includes_default(client, services):
+    response = client.get("/api/documents/knowledge-bases")
+    assert response.status_code == 200
+    ids = [kb["id"] for kb in response.json()]
+    assert "default" in ids
+
+
+def test_document_chunks(client, services):
+    document = client.post(
+        "/api/documents/upload",
+        files={"file": ("doc.txt", b"chunk one chunk two")},
+    ).json()
+    response = client.get(f"/api/documents/{document['id']}/chunks")
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, list)
+    assert payload[0]["text"]
+    assert payload[0]["document_id"] == document["id"]
+
+
+def test_document_chunks_404_for_missing_doc(client, services):
+    response = client.get("/api/documents/no-such-id/chunks")
+    assert response.status_code == 404

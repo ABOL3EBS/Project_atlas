@@ -240,6 +240,14 @@ committed; production retrieval/agent behavior unchanged except on a measured de
 - Screens: Knowledge Base (upload, status badges, delete), Chat (grounded answers, clickable citations), Trace panel (streamed events)
 - Simple, clean; UI complexity must not distract from the AI engineering
 
+Status: **COMPLETE**
+- UI source of truth: `frontend/src/components/agent-dashboard-spec.md`.
+- Screens: Chat (streaming SSE via `fetch`+SSE parser, markdown answers, citations → right-side source drawer with real chunk text, empty-state example chips, conversation history/new-chat, source selector, "Show trace" toggle), Knowledge Base (KB collection selector/new-collection, upload dropzone, status badges with spinner, delete-with-confirm, file preview), Trace panel (per-turn; live timeline built from streamed SSE events while generating, replaced by the precise persisted trace on completion; retrieved sources; performance: total/retrieval/generation latency), Settings (live `/api/health` status + read-only backend `.env` configuration note).
+- Two **additive read-only** backend endpoints were added to satisfy spec features that the existing API could not express: `GET /api/documents/knowledge-bases` (enumerate collections, incl. always-default) and `GET /api/documents/{document_id}/chunks` (real chunk text used by the source drawer + trace source expansion — trace metadata itself never carries document text by design, so chunk text is fetched from the document API at view time).
+- Verified: 167 backend tests pass, `ruff check` clean; frontend `tsc --noEmit` + `vite build` clean; live smoke test against Ollama (upload → ingest → chat SSE → citations → `trace_completed`), grounding rejection path, trace/conversation REST, KB isolation (404 cross-KB), delete (204).
+- Deviations / documented limitations: no runtime settings API exists, so the Settings screen is read-only (config via backend `.env`, documented defaults shown); KB enumeration reflects collections with at least one indexed document (plus `default`); ingestion is synchronous, so no long-lived polling; historical-turn retrieved-chunk lists are not persisted in traces, so the trace panel's source rows for old turns are derived from the persisted citation events (for the live turn they come from the retrieval SSE event).
+- Local run: backend `uv run uvicorn app.main:app --port 8000`, frontend `npm run dev` → http://localhost:5173 (Vite proxies `/api` to `:8000`).
+
 ### M8 — Docker / Deployment
 - Dockerfiles + `docker-compose.yml` → `docker compose up`
 - Rate limiting + isolation notes for public hosting
