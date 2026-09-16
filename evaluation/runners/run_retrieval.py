@@ -107,7 +107,8 @@ async def run_pipeline(
         else:
             transformer = LLMMultiQueryTransformer(llm_provider, variants=variants)
             result = await multi_query_search(
-                retriever, transformer, reranker, knowledge_base_id, item.question, top_k, candidates
+                retriever, transformer, reranker, knowledge_base_id, item.question, top_k,
+                candidates,
             )
         wall_time = (asyncio.get_running_loop().time() - begin) * 1000.0
         per_query.append(

@@ -5,10 +5,11 @@ ingestion, semantic retrieval, agentic tool selection, reranking, conversational
 memory, citation-backed generation, execution tracing, and automated evaluation —
 fully runnable locally for $0.
 
-> **Status**: **M0 + M1 + M2 + M3 + M4 + M5 complete** (local RAG vertical slice,
-> agent with tools and conversation memory, measured retrieval experiments,
-> execution trace/observability). M6+ not started; only on explicit instruction.
-> See `IMPLEMENTATION_PLAN.md` for the plan and `ATLAS_PROJECT_SPEC.md` for the spec.
+> **Status**: **M0–M6 complete** (local RAG vertical slice, agent with tools and
+> conversation memory, measured retrieval experiments, execution trace/observability,
+> answer-level evaluation + grounding threshold calibration). M7+ not started; only on
+> explicit instruction. See `IMPLEMENTATION_PLAN.md` for the plan and
+> `ATLAS_PROJECT_SPEC.md` for the spec.
 
 ## Stack
 
@@ -113,6 +114,53 @@ curl "http://localhost:8000/api/trace/<conversation_id>?knowledge_base_id=defaul
 
 Traces also stream live on the chat SSE channel (`trace`, `reranking`, `grounding`,
 `citation`, `trace_completed` events) alongside the existing observability events.
+
+### Answer evaluation (M6)
+
+M6 extends measurement from retrieval (M4) to the full generated answer. The answer
+runner (`evaluation/runners/run_answer_eval.py`) drives the real `AtlasAgent` over 68
+labelled questions — the 48 supported questions from M4 plus 20 out-of-domain
+unsupported questions (`evaluation/datasets/answer.json`, expected answer = NOT_FOUND) —
+against the same 12-doc corpus, and measures rejection, citations, judge-based
+faithfulness, and full-turn latency. Results are written to `evaluation/results/`
+(nothing estimated).
+
+Measured E2E at the then-current default threshold 0.45 (`evaluation/results/`):
+
+```
+unsupported rejection rate : 0.2000  (4/20)
+unsupported answered rate  : 0.8000  (16/20 → hallucination risk)
+supported answer rate      : 0.9792  (47/48)
+citation precision         : 0.5952   coverage 0.9524
+faithfulness (judge, n=42) : 0.9048
+latency mean/med/p90       : 6326 / 6150 / 8340 ms
+```
+
+The headline deliverable is the **grounding-threshold calibration** — the same real
+search scores, expressed as an accept/reject curve:
+
+```
+threshold              0.35    0.40    0.45    0.50    0.55    0.60    0.65
+true_accept (48)       1.0000  1.0000  1.0000  1.0000  1.0000  1.0000  0.7500
+false_accept (20)      1.0000  1.0000  0.9500  0.7500  0.2500  0.0000  0.0000
+```
+
+The 0.45 default was a knife-edge (0.95 false-accept): 19 of 20 unsupported queries
+cleared it. The measured cliff is **0.60** — every supported question scores ≥ 0.604,
+every unsupported one ≤ 0.587 — so the default threshold moved **0.45 → 0.60**
+(only after measurement, per the M4/M5 contract). Effect on the same real recordings:
+gate false-accepts 19/20 → 0/20, supported acceptance unchanged 48/48, projected E2E
+unsupported rejection 0.20 → 0.55. The residual unsupported answers are the planner
+answering ~half of them directly (bypassing the gate); that is a measured finding, not
+silently fixed by the threshold change.
+
+Reproduce:
+
+```bash
+cd backend
+uv run python ../evaluation/runners/run_retrieval.py   # M4
+uv run python ../evaluation/runners/run_answer_eval.py  # M6
+```
 
 ### Tests & lint
 

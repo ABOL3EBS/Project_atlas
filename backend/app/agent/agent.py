@@ -59,7 +59,7 @@ class AtlasAgent:
         conversation_store: ConversationStore | None = None,
         memory_selector: MemorySelector | None = None,
         registry: ToolRegistry | None = None,
-        grounding_threshold: float = 0.45,
+        grounding_threshold: float = 0.60,
         trace_store: TraceStore | None = None,
     ):
         self._retriever = retriever

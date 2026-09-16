@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     retrieval_top_k: int = 8
     retrieval_min_score: float = 0.20
-    grounding_threshold: float = 0.45
+    grounding_threshold: float = 0.60
 
     chunk_size: int = 500
     chunk_overlap: int = 50

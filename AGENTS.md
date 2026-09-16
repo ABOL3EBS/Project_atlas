@@ -8,7 +8,7 @@
 
 ## Current Status
 
-The project has completed **M0 + M1 + M2 + M3 + M4 + M5**.
+The project has completed **M0 + M1 + M2 + M3 + M4 + M5 + M6**.
 
 M4 (retrieval experiments) produced real measured results on `knowledge/eval/`
 (12 docs, 39 chunks) + a 48-question dataset (see `IMPLEMENTATION_PLAN.md`);
@@ -25,7 +25,19 @@ BM25 reranking (adopted in M4) is now also wired into the production
 execution telemetry only — never chain-of-thought, system prompts, retrieved
 text, arguments, or secrets.
 
-Do not implement M6 or later unless explicitly instructed after M5 acceptance
+M6 (answer evaluation) is complete: `evaluation/runners/run_answer_eval.py` runs
+full `AtlasAgent` turns over 68 real questions (48 supported + 20 unsupported,
+dataset in `evaluation/datasets/answer.json`) and measures unsupported-answer
+rejection, citation precision/coverage, LLM-as-judge faithfulness (local provider,
+`app/evaluation/judge.py`), and full-turn latency. The grounding-threshold
+calibration found a measured cliff at 0.60 (supported floor 0.604 vs. unsupported
+ceiling 0.587), so the production default `grounding_threshold` was changed
+**0.45 → 0.60** on that measured delta (config.py + service/agent defaults).
+Measured caveats that remain open (not silently fixed): the planner answers ~half
+the out-of-domain questions directly, bypassing the grounding gate; and the
+faithfulness judge is the local 2b model.
+
+Do not implement M7 or later unless explicitly instructed after M6 acceptance
 criteria pass.
 
 ## M5 Trace Contract

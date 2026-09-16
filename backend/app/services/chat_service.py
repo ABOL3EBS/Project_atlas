@@ -37,7 +37,7 @@ class ChatService:
         self,
         retriever: Retriever,
         llm_provider: LLMProvider,
-        grounding_threshold: float = 0.45,
+        grounding_threshold: float = 0.60,
         *,
         vector_store: VectorStore | None = None,
         document_store: DocumentStore | None = None,

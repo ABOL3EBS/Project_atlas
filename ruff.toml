@@ -1,0 +1,8 @@
+# Root lint config so `uv run ruff check .` covers evaluation/ too.
+# backend/pyproject.toml holds the canonical project config; this file only
+# applies to paths without a nearer pyproject.toml (currently evaluation/*).
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "B", "UP"]

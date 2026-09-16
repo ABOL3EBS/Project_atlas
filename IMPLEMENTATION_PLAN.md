@@ -2,7 +2,7 @@
 
 Source of truth for the Atlas project direction. This document lives in the repo so the plan is durable and not dependent on chat context. Review `ATLAS_PROJECT_SPEC.md` for the full product spec.
 
-Status: **M0/M1 complete — M2 complete — M3 complete — M4 complete — M5 complete**
+Status: **M0/M1 complete — M2 complete — M3 complete — M4 complete — M5 complete — M6 complete**
 
 ---
 
@@ -134,6 +134,90 @@ isolation, and trace API + SSE tests (142+ tests).
 - Dataset of 20–50 questions with `expected_sources`
 - Metrics: Recall@K, MRR, citation accuracy, faithfulness/groundedness, latency, unsupported-answer rejection
 - Real numbers (never fabricated) → README + results files
+
+**M6 status:** complete. Every metric below is from a real run
+(`evaluation/results/answer-summary.json`, `answer-per-question.json`, produced by
+`evaluation/runners/run_answer_eval.py`); nothing is estimated.
+
+**M6 scope (as executed)** — extends measurement from retrieval-only (done, M4) to the
+full generated answer, and calibrates grounding on real data. Reuses the existing
+48-question dataset (`evaluation/datasets/retrieval.json`), the retrieval harness
+(`evaluation/runners/run_retrieval.py`, `app/evaluation/`), and the 12-doc corpus
+(`knowledge/eval/`), same local providers as M4 (`nomic-embed-text`, `gemma2:2b`).
+
+1. **Unsupported-question set**: `evaluation/datasets/answer.json` — 20 out-of-domain
+   questions (the 0.43–0.46 knife-edge class from the M5 live pass: coral reefs,
+   auroras, whale migration, sourdough, mRNA, fjords, …) with `expected_sources: []`
+   and expected answer = NOT_FOUND. Real corpus, no new documents. Kept in a separate
+   file rather than inside `retrieval.json` so the M4 runner and its committed results
+   (and the `MAX_QUESTIONS=50` gate) stay untouched; the answer-eval runner combines
+   retrieval.json (supported) + answer.json (unsupported).
+2. **Generation-level runner**: `evaluation/runners/run_answer_eval.py` runs the full
+   `AtlasAgent` turn over the 68 questions; raw runs + metrics to `evaluation/results/`
+   (gitignored), dataset JSON committed. Also does a single real search per question for
+   calibration scores (scores do not depend on the threshold, so the accept curve is
+   exact for any threshold).
+3. **Metrics** (`app/evaluation/answer_eval.py`, `app/evaluation/judge.py`):
+   unsupported-answer rejection rate; citation precision (cited documents in
+   `expected_sources` vs. total cited) and citation coverage; faithfulness via
+   LLM-as-judge on the existing local `LLMProvider` (no new deps; judge prompt is data
+   and never enters the trace); full-turn latency.
+4. **Grounding threshold calibration (first-class deliverable)**: threshold grid over
+   both sets → measured False-accept/True-accept curve below → default changed on a
+   measured delta (see result).
+5. **Tests**: `backend/tests/test_answer_eval.py` (21 tests: dataset schema/validation,
+   all metrics, calibration/recommendation, judge parsing/failure/truncation).
+
+**Measured results** (local, `gemma2:2b` + `nomic-embed-text`, 68 real agent turns):
+
+**E2E at the then-current default threshold 0.45:**
+
+| Metric | Value |
+|---|---|
+| Questions | 68 (48 supported / 20 unsupported) |
+| Unsupported rejection rate | 0.2000 (4/20: coral reefs, Dead Sea, Voyager record, boron) |
+| Unsupported answered rate | 0.8000 (16/20) — 10 direct (planner never searched), 7 passed the 0.45 gate |
+| Supported answer rate | 0.9792 (47/48; the 1 miss was an empty `retrieve_document`, score-gate-irrelevant) |
+| Supported answered direct (no search) | 0.1042 (5/48 planner-direct) |
+| Citation precision | 0.5952 |
+| Citation coverage | 0.9524 |
+| Faithfulness (LLM-as-judge, n=42) | 0.9048 |
+| Latency mean / median / p90 | 6326 ms / 6150 ms / 8340 ms |
+
+**Grounding gate calibration** (`true_accept` = supported accepted at/above threshold,
+48 available; `false_accept` = unsupported accepted, 20 available — real search scores):
+
+```
+threshold              0.35    0.40    0.45    0.50    0.55    0.60    0.65
+true_accept            1.0000  1.0000  1.0000  1.0000  1.0000  1.0000  0.7500
+false_accept           1.0000  1.0000  0.9500  0.7500  0.2500  0.0000  0.0000
+```
+
+- Supported score floor observed: **0.6041**; unsupported score ceiling: **0.5873**.
+  `0.60` is the cliff: it rejects all 20 unsupported queries at the gate while
+  accepting all 48 supported ones — false_accept 0.95 → 0.00 at zero true-accept cost.
+- The band is tight (everything sits in ~0.45–0.65), so 0.60 is a knife-edge too, but
+  on this corpus it is the exact separator (margin 0.017).
+
+**Decision (measured delta):** default `grounding_threshold` moved **0.45 → 0.60**
+(`config.py`, `ChatService`, `AtlasAgent`). Measured effect: gate false-accepts 19/20 →
+0/20, supported gate acceptance 48/48 unchanged; projected E2E unsupported rejection on
+the same real recordings rises 0.20 → 0.55 (the 7 gate-passed false accepts are all
+< 0.60; the 10 planner-direct answers are untouched by the threshold). The two
+planner-behavior findings are out of scope for the threshold change and are NOT
+"fixed" by it: (a) the planner answers ~half the out-of-domain questions directly,
+bypassing retrieval/grounding entirely; (b) `retrieve_document` empty-evidence handling
+is a separate 1-case miss. Neither is silently papered over; both stay as measured
+observations for future milestones.
+
+**Honest limits:** the faithfulness judge is the local 2b model (38/42 = 0.9048 agreed
+with human-intended grounding; 4 disagreements) and citation precision counts every
+cited document as written, including multi-doc `compare_documents` answers.
+
+Acceptance: every metric backed by real runner output in `evaluation/results/`; a
+threshold recommendation with a measured precision/rejection table; dataset JSON
+committed; production retrieval/agent behavior unchanged except on a measured delta
+(satisfied — grounding default changed only after measurement).
 
 ### M7 — Frontend
 - Vite + React + TS + Tailwind
