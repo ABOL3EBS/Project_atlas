@@ -2,7 +2,7 @@
 
 Source of truth for the Atlas project direction. This document lives in the repo so the plan is durable and not dependent on chat context. Review `ATLAS_PROJECT_SPEC.md` for the full product spec.
 
-Status: **M0/M1 complete — M2 complete — M3 complete — M4 complete**
+Status: **M0/M1 complete — M2 complete — M3 complete — M4 complete — M5 complete**
 
 ---
 
@@ -107,6 +107,28 @@ ties reranking quality at 39× latency; neither is wired into production. Reprod
 - Execution-event model (safe observable events only)
 - `/api/trace/{conversation_id}`; latency, tool call, error, citation diagnostics
 - SSE event emission (`status`, `retrieval`, `citation`, `token`)
+
+**M5 status:** done. Every real execution step of `AtlasAgent.run` is recorded as a
+structured trace: `trace_started`, `agent_started`, `decision`, `tool_call`,
+`retrieval`, `reranking`, `grounding`, `citation`, `generation_started`,
+`generation_completed`, `error`, `trace_completed`. The trace module lives in
+`app/trace/` (event model + in-memory `TraceRecorder` + SQLite `TraceStore`, separate
+`traces.db`, `knowledge_base_id` scoping on every row). Trace metadata is telemetry
+only — counts, KB id, tool name, method, thresholds, scores, latency — never
+chain-of-thought, system prompts, retrieved text, tool arguments, or secrets; error
+messages are capped at 500 chars and surfaced with an `AGENT_FAILED` code. Persisted
+traces are retrievable via `GET /api/trace/{conversation_id}?knowledge_base_id=…`
+(404 for a different KB, mirroring `/api/conversations`). The same SSE channel now
+carries `trace`, `reranking`, `grounding`, `citation`, and `trace_completed` events
+in addition to the existing ones; every persisted trace ends in a `trace_completed`
+event with overall status and latency. M5 also closed a usability gap: BM25
+reranking (the M4-adopted improvement) is now actually wired into the production
+`SearchKnowledgeBaseTool` — embedding top-k results are re-scored with the same
+`BM25Reranker` the experiments used, and the `search`/`rerank` timings land in the
+retrieval/reranking trace events. Tests: trace recorder/store round-trip and order,
+agent trace recording per flow (direct, search, retrieve_document, memory), failed
+trace on tool/LLM failure, no-secrets/reasoning guard, multi-trace threads, KB
+isolation, and trace API + SSE tests (142+ tests).
 
 ### M6 — Evaluation
 - Dataset of 20–50 questions with `expected_sources`

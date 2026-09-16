@@ -11,6 +11,7 @@ from app.retrieval.retriever import Retriever
 from app.services.chat_service import ChatService
 from app.services.document_store import DocumentStore
 from app.services.ingestion_service import IngestionService
+from app.trace.store import TraceStore
 
 
 @lru_cache
@@ -43,6 +44,12 @@ def get_document_store() -> DocumentStore:
 def get_conversation_store() -> ConversationStore:
     settings = get_settings()
     return ConversationStore(settings.conversation_db_path)
+
+
+@lru_cache
+def get_trace_store() -> TraceStore:
+    settings = get_settings()
+    return TraceStore(settings.trace_db_path)
 
 
 def get_memory_selector() -> MemorySelector:
@@ -80,4 +87,5 @@ def get_chat_service() -> ChatService:
         document_store=get_document_store(),
         conversation_store=get_conversation_store(),
         memory_selector=get_memory_selector(),
+        trace_store=get_trace_store(),
     )

@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import chat, conversations, documents, health
+from .api import chat, conversations, documents, health, traces
 
 logger = logging.getLogger("atlas")
 
@@ -29,3 +29,4 @@ app.include_router(health.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(conversations.router, prefix="/api")
+app.include_router(traces.router, prefix="/api")

@@ -47,3 +47,34 @@ class HealthOut(BaseModel):
     status: str
     llm_available: bool
     embedding_available: bool
+
+
+class TraceEventOut(BaseModel):
+    event_id: str
+    trace_id: str
+    event_type: str
+    status: str
+    timestamp: str
+    conversation_id: str | None = None
+    knowledge_base_id: str
+    latency_ms: float | None = None
+    metadata: dict = Field(default_factory=dict)
+    error: dict | None = None
+
+
+class TraceOut(BaseModel):
+    trace_id: str
+    conversation_id: str | None = None
+    knowledge_base_id: str
+    question: str | None = None
+    status: str
+    started_at: str
+    completed_at: str | None = None
+    latency_ms: float | None = None
+    events: list[TraceEventOut] = Field(default_factory=list)
+
+
+class TraceListOut(BaseModel):
+    conversation_id: str
+    knowledge_base_id: str
+    traces: list[TraceOut] = Field(default_factory=list)

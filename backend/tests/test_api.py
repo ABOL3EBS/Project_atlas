@@ -9,6 +9,7 @@ from app.api.deps import (
     get_conversation_store,
     get_ingestion_service,
     get_settings,
+    get_trace_store,
 )
 from app.config import Settings
 from app.ingestion import ChunkingConfig
@@ -18,6 +19,7 @@ from app.retrieval.retriever import Retriever
 from app.services.chat_service import ChatService
 from app.services.document_store import DocumentStore
 from app.services.ingestion_service import IngestionService
+from app.trace.store import TraceStore
 from tests.conftest import (
     FakeEmbeddingProvider,
     FakeLLMProvider,
@@ -33,6 +35,7 @@ def services(tmp_path: Path):
     embeddings = FakeEmbeddingProvider()
     document_store = DocumentStore(str(tmp_path / "atlas.db"))
     conversation_store = ConversationStore(str(tmp_path / "conversations.db"))
+    trace_store = TraceStore(str(tmp_path / "traces.db"))
     ingestion = IngestionService(
         vector_store=vector_store,
         embedding_provider=embeddings,
@@ -47,6 +50,7 @@ def services(tmp_path: Path):
         vector_store=vector_store,
         document_store=document_store,
         conversation_store=conversation_store,
+        trace_store=trace_store,
     )
 
     def override_settings() -> Settings:
@@ -54,12 +58,14 @@ def services(tmp_path: Path):
             sqlite_path=str(tmp_path / "atlas.db"),
             chroma_dir=str(tmp_path / "chroma"),
             conversation_db_path=str(tmp_path / "conversations.db"),
+            trace_db_path=str(tmp_path / "traces.db"),
         )
 
     app.dependency_overrides[get_settings] = override_settings
     app.dependency_overrides[get_ingestion_service] = lambda: ingestion
     app.dependency_overrides[get_chat_service] = lambda: chat_service
     app.dependency_overrides[get_conversation_store] = lambda: conversation_store
+    app.dependency_overrides[get_trace_store] = lambda: trace_store
     yield chat_service
     app.dependency_overrides.clear()
 
@@ -297,6 +303,134 @@ def test_conversation_detail_is_knowledge_base_scoped(client, services):
         params={"knowledge_base_id": "kb-other"},
     )
     assert wrong_kb.status_code == 404
+
+
+def test_trace_endpoint_returns_persisted_execution_events(client, services):
+    services._vector_store.query_results = [
+        {
+            "chunk_id": "doc-1-0",
+            "text": "On-premise deployment is documented.",
+            "document_id": "doc-1",
+            "document_name": "install.pdf",
+            "page": 18,
+            "section": None,
+            "score": 0.85,
+        }
+    ]
+    response = client.post(
+        "/api/chat", json={"message": "deploy on-premise?", "knowledge_base_id": "kb-a"}
+    )
+    events = _parse_sse(response.text)
+    conversation_id = next(
+        e["conversation_id"]
+        for e in events
+        if e["type"] == "conversation"
+    )
+    assert any(e["type"] == "trace_completed" for e in events)
+
+    detail = client.get(
+        f"/api/trace/{conversation_id}",
+        params={"knowledge_base_id": "kb-a"},
+    )
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["conversation_id"] == conversation_id
+    assert payload["knowledge_base_id"] == "kb-a"
+    traces = payload["traces"]
+    assert traces
+    event_types = [event["event_type"] for event in traces[0]["events"]]
+    assert "trace_started" in event_types
+    assert "agent_started" in event_types
+    assert "decision" in event_types
+    assert "generation_started" in event_types
+    assert "grounding" in event_types
+    assert "citation" in event_types
+    assert traces[0]["status"] == "completed"
+
+
+def test_trace_endpoint_is_knowledge_base_scoped(client, services):
+    response = client.post(
+        "/api/chat", json={"message": "hello", "knowledge_base_id": "kb-a"}
+    )
+    conversation_id = next(
+        e["conversation_id"]
+        for e in _parse_sse(response.text)
+        if e["type"] == "conversation"
+    )
+    wrong_kb = client.get(
+        f"/api/trace/{conversation_id}",
+        params={"knowledge_base_id": "kb-other"},
+    )
+    assert wrong_kb.status_code == 404
+
+
+def test_trace_endpoint_missing_conversation_404(client, services):
+    response = client.get(
+        "/api/trace/does-not-exist",
+        params={"knowledge_base_id": "kb-a"},
+    )
+    assert response.status_code == 404
+
+
+def test_trace_failure_records_failed_trace_via_api(client, services):
+    class ExplodingRetriever:
+        def search(self, knowledge_base_id: str, query: str, top_k: int | None = None):
+            raise RuntimeError("vector store unavailable")
+
+    replacement = ChatService(
+        retriever=ExplodingRetriever(),
+        llm_provider=FakeLLMProvider(plan_response=SEARCH_PLAN),
+        vector_store=FakeVectorStore(),
+        conversation_store=services._conversation_store,
+        trace_store=services._trace_store,
+    )
+    app.dependency_overrides[get_chat_service] = lambda: replacement
+
+    response = client.post(
+        "/api/chat", json={"message": "anything", "knowledge_base_id": "kb-a"}
+    )
+    events = _parse_sse(response.text)
+    completed = [e for e in events if e["type"] == "trace_completed"]
+    assert completed and completed[0]["status"] == "failed"
+    assert any(e["type"] == "error" for e in events)
+
+    conversation_id = next(
+        e["conversation_id"] for e in events if e["type"] == "conversation"
+    )
+    detail = client.get(
+        f"/api/trace/{conversation_id}",
+        params={"knowledge_base_id": "kb-a"},
+    )
+    assert detail.status_code == 200
+    traces = detail.json()["traces"]
+    assert traces[0]["status"] == "failed"
+
+
+def test_chat_streams_trace_events(client, services):
+    vector_store = FakeVectorStore()
+    vector_store.query_results = [
+        {
+            "chunk_id": "doc-1-0",
+            "text": "On-premise deployment is documented.",
+            "document_id": "doc-1",
+            "document_name": "install.pdf",
+            "page": 18,
+            "section": None,
+            "score": 0.85,
+        }
+    ]
+    _replace_default_retriever(services, vector_store)
+
+    response = client.post(
+        "/api/chat", json={"message": "deploy on-premise?", "knowledge_base_id": "kb-a"}
+    )
+    events = _parse_sse(response.text)
+    types = {event["type"] for event in events}
+    assert {"trace", "reranking", "grounding", "citation", "trace_completed"} <= types
+    trace = next(e for e in events if e["type"] == "trace")
+    assert trace["trace_id"]
+    reranking = next(e for e in events if e["type"] == "reranking")
+    assert reranking["method"] == "bm25"
 
 
 def _parse_sse(text: str) -> list[dict]:

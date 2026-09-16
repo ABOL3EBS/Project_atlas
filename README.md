@@ -5,10 +5,10 @@ ingestion, semantic retrieval, agentic tool selection, reranking, conversational
 memory, citation-backed generation, execution tracing, and automated evaluation —
 fully runnable locally for $0.
 
-> **Status**: implementing **M0 + M1 + M2 + M3 + M4** (local RAG vertical slice,
-> agent with tools and conversation memory, measured retrieval experiments). M5+
-> unless explicitly instructed. See `IMPLEMENTATION_PLAN.md` for the plan and
-> `ATLAS_PROJECT_SPEC.md` for the full spec.
+> **Status**: **M0 + M1 + M2 + M3 + M4 + M5 complete** (local RAG vertical slice,
+> agent with tools and conversation memory, measured retrieval experiments,
+> execution trace/observability). M6+ not started; only on explicit instruction.
+> See `IMPLEMENTATION_PLAN.md` for the plan and `ATLAS_PROJECT_SPEC.md` for the spec.
 
 ## Stack
 
@@ -35,9 +35,10 @@ Verify: `GET http://localhost:8000/api/health`
 | POST | `/api/documents/upload` | Upload PDF/markdown/txt (multipart, `knowledge_base_id` form field) |
 | GET | `/api/documents` | List documents for a knowledge base |
 | DELETE | `/api/documents/{id}` | Delete a document and its vectors |
-| POST | `/api/chat` | Ask a question; SSE event stream (decision/tool_call/retrieval/token/done/error). Pass `conversation_id` to resume a thread |
+| POST | `/api/chat` | Ask a question; SSE event stream (decision/tool_call/retrieval/token/done/error/trace/…). Pass `conversation_id` to resume a thread |
 | GET | `/api/conversations` | List conversations for a knowledge base |
 | GET | `/api/conversations/{id}` | Conversation detail (KB-scoped) |
+| GET | `/api/trace/{conversation_id}` | Execution traces for a conversation (KB-scoped, `knowledge_base_id` query param) |
 | GET | `/api/health` | Provider availability |
 
 ### Retrieval experiments (M4)
@@ -75,12 +76,43 @@ What the measurements say:
   latency of the baseline. Not adopted on this dataset.
 
 So production search stays on plain embedding search with BM25 reranking behind the
-swappable `Reranker` interface. Reproduce with:
+swappable `Reranker` interface (and, since M5, the rerank actually runs in the
+production `SearchKnowledgeBaseTool`). Reproduce with:
 
 ```bash
 cd backend
 uv run python ../evaluation/runners/run_retrieval.py
 ```
+
+### Execution traces (M5)
+
+Every real execution step of a chat turn is recorded as a trace and persisted to
+`backend/data/traces.db` (SQLite, one store per DB, KB-scoped):
+
+- **Event types**: `trace_started`, `agent_started`, `decision`, `tool_call`,
+  `retrieval`, `reranking`, `grounding`, `citation`, `generation_started`,
+  `generation_completed`, `error`, `trace_completed`.
+- **Retrieval**: recorded counts are real (`candidates` vs. `returned`) and so are
+  the `search`/`rerank` timings; the `reranking` event fires only when a rerank ran
+  (search tool), never for `retrieve_document`.
+- **Grounding**: `passed`/`rejected` with the rule (`threshold` for search/compare
+  tools, `any_evidence` for retrieve_document/tool), the top evidence score, and the
+  threshold that decided it.
+- **Citations**: one event per verified citation (chunk id, document name, page,
+  section).
+- **Security boundary**: traces expose telemetry only — counts, KB id, tool name,
+  method, scores, latency. They never include retrieved document text, the user
+  query, tool arguments, model reasoning, system prompts, or provider secrets.
+  Error events carry a safe message (capped at 500 chars).
+
+Retrieve traces for a conversation (404 if you use the wrong knowledge base):
+
+```bash
+curl "http://localhost:8000/api/trace/<conversation_id>?knowledge_base_id=default"
+```
+
+Traces also stream live on the chat SSE channel (`trace`, `reranking`, `grounding`,
+`citation`, `trace_completed` events) alongside the existing observability events.
 
 ### Tests & lint
 
@@ -90,7 +122,10 @@ uv run pytest
 uvx ruff check .
 ```
 
-Every chat SSE stream emits safe observable events (`decision`, `tool_call`,
-`retrieval`, `memory`, `status`, `token`, `done`, `answer`, `error`) — never hidden
+Every chat SSE stream emits safe observable events (`conversation`, `decision`,
+`tool_call`, `retrieval`, `reranking`, `grounding`, `citation`, `memory`, `status`,
+`token`, `done`, `answer`, `trace`, `trace_completed`, `error`) — never hidden
 chain-of-thought. Atlas plans each turn (direct answer vs. one of four tools) and
-only recalls selective, relevant conversation context.
+only recalls selective, relevant conversation context. Traces are persisted for
+every turn, so a call that fails mid-generation still leaves a `trace_completed`
+event with a `failed` status and a safe error message.

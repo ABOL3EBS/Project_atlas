@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     sqlite_path: str = "./data/atlas.db"
     uploaded_dir: str = "./data/uploads"
     conversation_db_path: str = "./data/conversations.db"
+    trace_db_path: str = "./data/traces.db"
 
     default_knowledge_base_id: str = "default"
 

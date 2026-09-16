@@ -19,6 +19,14 @@ class OllamaProvider(LLMProvider):
         self._base_url = base_url.rstrip("/")
         self._model = model
 
+    @property
+    def provider_name(self) -> str:
+        return "ollama"
+
+    @property
+    def model_name(self) -> str:
+        return self._model
+
     async def generate(
         self, prompt: str, *, system: str | None = None, json_mode: bool = False
     ) -> str:

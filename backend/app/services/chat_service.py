@@ -27,6 +27,7 @@ from app.memory.selector import MemorySelector
 from app.retrieval.base import VectorStore
 from app.retrieval.retriever import Retriever
 from app.services.document_store import DocumentStore
+from app.trace.store import TraceStore
 
 DEFAULT_RETRIEVE_LIMIT = 12
 
@@ -43,11 +44,13 @@ class ChatService:
         conversation_store: ConversationStore | None = None,
         memory_selector: MemorySelector | None = None,
         registry: ToolRegistry | None = None,
+        trace_store: TraceStore | None = None,
     ):
         settings = get_settings()
         self._retriever = retriever
         self._llm_provider = llm_provider
         self._grounding_threshold = grounding_threshold
+        self._trace_store = trace_store
 
         self._vector_store = vector_store or _default_vector_store(settings)
         self._document_store = document_store or DocumentStore(settings.sqlite_path)
@@ -66,6 +69,7 @@ class ChatService:
             memory_selector=self._memory_selector,
             registry=self._registry,
             grounding_threshold=grounding_threshold,
+            trace_store=trace_store,
         )
 
     async def run(

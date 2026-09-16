@@ -12,6 +12,27 @@ def _clamp_top_k(top_k: object, default: int) -> int:
     return max(1, min(top_k, 8))
 
 
+def _now_ms() -> float:
+    import time
+
+    return time.perf_counter() * 1000.0
+
+
+def _bm25_rerank(query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """Re-order the retrieved pool by BM25 lexical relevance.
+
+    M4 measured BM25 reranking as the only adopted retrieval improvement; this
+    wires it into the production search path (which M4 docs already claimed) so
+    it exercises the same `BM25Reranker` the experiments used. The pool is the
+    embedding top-k results, so the rerank reorders within that set; a larger
+    cross-corpus candidate pool is a retrieval experiment, out of scope for M5.
+    """
+    from app.retrieval.pipelines import BM25Reranker
+
+    reranker = BM25Reranker([chunk.text for chunk in chunks])
+    return reranker.rerank(query, chunks, None)
+
+
 def _resolve_document(documents: list[dict], name: str) -> dict | None:
     lowered = name.strip().lower()
     for document in documents:
@@ -44,12 +65,25 @@ class SearchKnowledgeBaseTool(Tool):
     async def execute(self, context: ToolContext, arguments: dict) -> ToolResult:
         query = arguments["query"]
         top_k = _clamp_top_k(arguments.get("top_k"), TOOL_SEARCH_TOP_K)
+        start = _now_ms()
         chunks = self._retriever.search(
             context.knowledge_base_id, query, top_k=top_k
         )
+        search_ms = _now_ms() - start
         if not chunks:
-            return ToolResult(summary="No passages in the knowledge base matched the query.")
-        return ToolResult(evidence=chunks)
+            return ToolResult(
+                summary="No passages in the knowledge base matched the query.",
+                candidates=0,
+                timings={"search": search_ms},
+            )
+        start = _now_ms()
+        reranked = _bm25_rerank(query, chunks)
+        rerank_ms = _now_ms() - start
+        return ToolResult(
+            evidence=reranked,
+            candidates=len(chunks),
+            timings={"search": search_ms, "rerank": rerank_ms},
+        )
 
 
 class RetrieveDocumentTool(Tool):
@@ -81,7 +115,7 @@ class RetrieveDocumentTool(Tool):
             context.knowledge_base_id, document["id"], limit=RETRIEVE_DOCUMENT_LIMIT
         )
         chunks = [_chunk_from_item(item, score=0.0) for item in items]
-        return ToolResult(evidence=chunks)
+        return ToolResult(evidence=chunks, candidates=len(chunks))
 
 
 class CompareDocumentsTool(Tool):
@@ -136,7 +170,7 @@ class CompareDocumentsTool(Tool):
             )
 
         note = f"Requested documents not found: {', '.join(missing)}." if missing else None
-        return ToolResult(evidence=evidence, summary=note)
+        return ToolResult(evidence=evidence, summary=note, candidates=len(evidence))
 
 
 class GetConversationContextTool(Tool):

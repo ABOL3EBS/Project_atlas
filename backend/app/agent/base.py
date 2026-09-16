@@ -27,6 +27,8 @@ class ToolContext:
 class ToolResult:
     evidence: list[RetrievedChunk] = field(default_factory=list)
     summary: str | None = None
+    candidates: int | None = None
+    timings: dict[str, float] = field(default_factory=dict)
 
 
 class Tool(ABC):
